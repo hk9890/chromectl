@@ -8,11 +8,36 @@ CGO_ENABLED = "0"
 description = "Build the chromectl binary into ./bin"
 run = "go build -o bin/chromectl ./cmd/chromectl"
 
-[tasks.test]
-description = "Run the tests"
-run = "go test ./..."
-
 [tasks.install]
 description = "Build, then register ./bin/chromectl as the extension's native messaging host"
 depends = ["build"]
 run = "./bin/chromectl install"
+
+[tasks.fmt]
+description = "Format Go source"
+run = "gofmt -w cmd internal"
+
+[tasks."fmt:check"]
+description = "Fail if any Go file is not formatted"
+run = 'test -z "$(gofmt -l cmd internal)" || { gofmt -l cmd internal; exit 1; }'
+
+[tasks.test]
+description = "Run the tests"
+run = "go test ./..."
+
+[tasks."test:race"]
+description = "Run the tests under the race detector; needs cgo"
+env = { CGO_ENABLED = "1" }
+run = "go test -race -count=3 ./..."
+
+[tasks.quality]
+description = "The pre-commit gate"
+depends = ["fmt:check", "vet", "test:race"]
+
+[tasks.vet]
+run = "go vet ./..."
+
+[tasks.drive]
+description = "Run ./bin/chromectl host against a scripted fake Chrome and exercise the CLI; no display needed"
+depends = ["build"]
+run = 'python3 scripts/fakechrome.py "$(mktemp -d)"'
