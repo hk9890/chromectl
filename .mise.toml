@@ -1,0 +1,18 @@
+[tools]
+go = "1.27.0"
+
+[env]
+CGO_ENABLED = "0"
+
+[tasks.build]
+description = "Build the chromectl binary into ./bin"
+run = "go build -o bin/chromectl ./cmd/chromectl"
+
+[tasks.test]
+description = "Run the tests"
+run = "go test ./..."
+
+[tasks.install]
+description = "Build, then register ./bin/chromectl as the extension's native messaging host"
+depends = ["build"]
+run = "./bin/chromectl install"
