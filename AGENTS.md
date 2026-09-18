@@ -35,6 +35,13 @@ under `cmd/`, `internal/`, `extension/` or `scripts/`.** Two files must agree
 byte for byte on the wire format, and one process must never write to stdout;
 neither is visible from the code.
 
+### Design intent, and any change to the model
+
+**MUST read [docs/design/README.md](docs/design/README.md) before adding a
+command, a field on the wire, a permission to the extension, or a process.**
+The design set carries the rejected alternatives, so a rejected idea is not
+re-proposed as new.
+
 ### Testing and verification
 
 **MUST read [docs/TESTING.md](docs/TESTING.md) before writing a test, before

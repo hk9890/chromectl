@@ -1,22 +1,16 @@
 # Overview
 
-## The constraint everything follows from
+## Start here
 
-An outside process cannot talk to Chrome. Only the extension can, and only
-outward: it calls `connectNative`, Chrome starts the program the manifest
-names, and the two share a pipe. So the CLI never connects to Chrome. It
-connects to the host Chrome already started.
+The design set under [design/](design/) owns why the system has this shape.
+[design/architecture.md](design/architecture.md) states the constraint every
+structural choice follows from: only the extension can open a connection, so
+the CLI talks to the host Chrome already started, never to Chrome.
 
 ```
 chromectl list ──unix socket──▶ chromectl host ◀──stdin/stdout──▶ extension ──▶ chrome.tabs
                 $XDG_RUNTIME_DIR/chromectl.sock   native messaging
 ```
-
-- The host lives as long as Chrome keeps the pipe open, and removes its socket
-  on the way out. Chrome owns its lifecycle; nobody starts or stops it.
-- An open native port keeps the MV3 service worker alive, so the extension
-  needs no keepalive.
-- The extension reconnects two seconds after the host goes away.
 
 ## Layout
 
@@ -32,11 +26,9 @@ chromectl list ──unix socket──▶ chromectl host ◀──stdin/stdout�
 
 ## Wire format
 
-- Host to extension: `{seq, cmd, id?, url?, window?}`. Extension to host:
-  `{seq, result}` or `{seq, error}`. `seq` correlates; `id` is a tab id.
-- CLI to host over the socket: one `Request` as a JSON line; one `Reply` back;
-  connection closed. The host fills `seq`.
-- Chrome accepts at most 1 MB per message from a host.
+[design/architecture.md](design/architecture.md) owns the two protocols.
+The fields are in `internal/proto/proto.go`; the extension reads them by the
+same JSON names.
 
 ## Finding things
 
