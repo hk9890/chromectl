@@ -49,6 +49,13 @@ your first `go test` or `mise run test*`, and before reporting a change as
 green.** The layer a test belongs in decides whether it can run without a
 Chrome.
 
+### Reviewing changes
+
+**MUST read [docs/REVIEWING.md](docs/REVIEWING.md) before reviewing a PR or a
+diff.** It carries the rules a finished change is held to: what happens to
+Chrome's error text on the way to the caller, and what the one sentinel error
+must say.
+
 ### Running chromectl by hand
 
 **MUST read [docs/RUNNING.md](docs/RUNNING.md) before running anything that

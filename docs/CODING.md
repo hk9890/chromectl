@@ -38,10 +38,3 @@ A command that needs more is a different product.
   native messaging manifest allows that id and nothing else.
 - Tab ids are Chrome's and reset on restart. chromectl exposes them as they
   are; matching a tab by URL is the caller's job.
-
-## Errors
-
-- Chrome's error text is the caller's error, unchanged: `No tab with id: 99.`
-  reaches the CLI as-is with exit code 1.
-- `client.ErrNoHost` is the one sentinel: the socket is absent. Its message
-  lists the three causes, in the order to check them.
