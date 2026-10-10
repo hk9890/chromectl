@@ -12,7 +12,9 @@ git push -u origin HEAD
 gh pr create --fill
 ```
 
-Squash-merge; delete the branch after.
+Review the PR against [REVIEWING.md](REVIEWING.md) with
+`/worktree-flow:worktree-review <pr>` before the merge. Squash-merge; delete the
+branch after.
 
 ## Commits
 
