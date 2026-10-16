@@ -27,15 +27,15 @@ func Run(fromChrome io.Reader, toChrome io.Writer, socketPath string) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(socketPath)
-	defer ln.Close()
+	defer func() { _ = os.Remove(socketPath) }()
+	defer func() { _ = ln.Close() }()
 
 	h := &host{toChrome: toChrome, pending: map[uint64]chan proto.Reply{}}
 
 	readErr := make(chan error, 1)
 	go func() {
 		readErr <- h.readReplies(fromChrome)
-		ln.Close()
+		_ = ln.Close()
 	}()
 
 	for {
@@ -87,7 +87,7 @@ func (h *host) failAll(err error) {
 }
 
 func (h *host) serve(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	var req proto.Request
 	if err := json.NewDecoder(bufio.NewReader(conn)).Decode(&req); err != nil {
 		_ = json.NewEncoder(conn).Encode(proto.Reply{Error: "bad request: " + err.Error()})

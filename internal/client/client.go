@@ -31,7 +31,7 @@ func Call(socketPath string, req proto.Request, out any) error {
 	if err != nil {
 		return ErrNoHost
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if err := json.NewEncoder(conn).Encode(req); err != nil {
 		return err
 	}

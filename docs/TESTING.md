@@ -16,8 +16,11 @@ the client got back.
 
 ## Gate
 
-`mise run quality` runs `fmt:check`, `vet` and `test:race` three times. It is
-the bar for "green"; a plain `go test` is not.
+`mise run quality` is the bar for "green"; a plain `go test` is not. Its steps
+are the `depends` of `[tasks.quality]` in `.mise.toml`.
+
+CI runs the same checks on every push in `.github/workflows/ci.yml`, plus
+`mise run vuln`, which needs the network.
 
 ## Before reporting a change as green
 

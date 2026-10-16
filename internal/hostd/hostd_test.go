@@ -46,7 +46,7 @@ func fakeExtension(t *testing.T, answer func(proto.Request) proto.Reply) (socket
 		}
 	}
 	return socket, func() {
-		fromExt.Close()
+		_ = fromExt.Close()
 		if err := <-ran; err != nil {
 			t.Errorf("Run returned %v after Chrome closed the pipe", err)
 		}
