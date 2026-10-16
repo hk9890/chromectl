@@ -26,6 +26,8 @@ Chrome started. A CLI call against it acts on the user's real tabs. `list` is
 harmless; `activate` and `open` change what the user sees; `close` is
 destructive. Confirm before any of the last three.
 
+Run `mise run chromectl -- <args>` to rebuild and call the CLI in one step.
+
 Setup, once, and only when asked:
 
 1. `mise run install` writes the manifest with the absolute path of
