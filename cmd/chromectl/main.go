@@ -19,12 +19,14 @@ import (
 
 const usage = `usage: chromectl <command> [args]
 
-  list                 every tab: id, window, active, title, url (tab-separated)
-  activate <tab-id>    activate the tab and focus its window
-  open <url> [window]  open url in a new tab, in the given window or the last focused one
-  close <tab-id>       close the tab
-  install              register this binary as the extension's native messaging host
-  host                 the native messaging host; Chrome starts this, not you
+  list [--json]                every tab: id, window, active, title, url
+                               (tab-separated, or a JSON array)
+  activate <tab-id>            activate the tab and focus its window
+  open [--json] <url> [window] open url in a new tab, in the given window or the
+                               last focused one; prints its id and window
+  close <tab-id>               close the tab
+  install                      register this binary as the extension's native messaging host
+  host                         the native messaging host; Chrome starts this, not you
 `
 
 func main() {
@@ -41,7 +43,7 @@ func main() {
 	var err error
 	switch cmd {
 	case "list":
-		err = list()
+		err = list(args)
 	case "activate":
 		err = tabCommand("activate", args)
 	case "close":
@@ -64,10 +66,21 @@ func main() {
 	}
 }
 
-func list() error {
-	var tabs []proto.Tab
+func list(args []string) error {
+	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print a JSON array")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return fmt.Errorf("list takes no arguments")
+	}
+	tabs := []proto.Tab{}
 	if err := client.Call(client.SocketPath(), proto.Request{Cmd: "list"}, &tabs); err != nil {
 		return err
+	}
+	if *asJSON {
+		return printJSON(tabs)
 	}
 	for _, t := range tabs {
 		active := "-"
@@ -92,6 +105,7 @@ func tabCommand(cmd string, args []string) error {
 
 func open(args []string) error {
 	fs := flag.NewFlagSet("open", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print a JSON object")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -110,8 +124,21 @@ func open(args []string) error {
 	if err := client.Call(client.SocketPath(), req, &opened); err != nil {
 		return err
 	}
+	if *asJSON {
+		return printJSON(struct {
+			ID     int `json:"id"`
+			Window int `json:"window"`
+		}{opened.ID, opened.Window})
+	}
 	fmt.Printf("%d\t%d\n", opened.ID, opened.Window)
 	return nil
+}
+
+// printJSON writes v as one line of JSON. URLs keep their & < > as is.
+func printJSON(v any) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetEscapeHTML(false)
+	return enc.Encode(v)
 }
 
 // install writes the native messaging manifest into every Chrome-family

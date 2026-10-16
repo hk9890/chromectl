@@ -32,6 +32,14 @@ caller reads it with `cut` or a split and never parses prose. An error from
 Chrome reaches the caller verbatim, with exit code 1; chromectl adds nothing
 Chrome did not say.
 
+`--json` on `list` and `open` prints the same fields as JSON, for a caller
+that cannot trust tab-separated text: a page title may itself contain a tab.
+`list` prints an array of `{id, window, active, title, url}`, `open` an object
+`{id, window}`. `activate` and `close` print nothing on success, so they take
+no `--json`; errors stay plain text on stderr in both modes. Tab-separated stays
+the default so a shell pipe needs no `jq`. This follows wctl, whose listing
+commands take `--json` and whose action commands do not.
+
 ## Install
 
 One binary, one unpacked extension, one manifest write. There is no daemon the
