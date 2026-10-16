@@ -32,8 +32,14 @@ func main() {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
 	}
+	cmd, args := os.Args[1], os.Args[2:]
+	// Chrome starts the native host as `chromectl <origin> --parent-window=0`;
+	// the manifest names a binary and cannot add a `host` argument.
+	if strings.HasPrefix(cmd, "chrome-extension://") {
+		cmd = "host"
+	}
 	var err error
-	switch cmd, args := os.Args[1], os.Args[2:]; cmd {
+	switch cmd {
 	case "list":
 		err = list()
 	case "activate":

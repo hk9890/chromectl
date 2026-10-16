@@ -9,7 +9,7 @@ browser.
 mise run drive
 ```
 
-`scripts/fakechrome.py` starts `./bin/chromectl host` on pipes, plays the
+`scripts/fakechrome.py` starts `./bin/chromectl` on pipes with the arguments Chrome passes, plays the
 extension, and runs `list`, `open` and `activate` through the CLI. It prints
 every request the host forwarded and every CLI result, then closes the pipe and
 reports the host's exit and that the socket is gone. Edit its `extension()`

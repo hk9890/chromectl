@@ -38,6 +38,6 @@ depends = ["fmt:check", "vet", "test:race"]
 run = "go vet ./..."
 
 [tasks.drive]
-description = "Run ./bin/chromectl host against a scripted fake Chrome and exercise the CLI; no display needed"
+description = "Run ./bin/chromectl as Chrome starts it, against a scripted fake Chrome and exercise the CLI; no display needed"
 depends = ["build"]
 run = 'python3 scripts/fakechrome.py "$(mktemp -d)"'

@@ -1,7 +1,8 @@
 import json, struct, subprocess, sys, os, time, threading
 rt = sys.argv[1]
 env = dict(os.environ, XDG_RUNTIME_DIR=rt)
-p = subprocess.Popen(["./bin/chromectl", "host"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env)
+# Chrome passes the origin, not "host": the manifest cannot add arguments.
+p = subprocess.Popen(["./bin/chromectl", "chrome-extension://mpnpeobidlmllklmdpnkhhhblkbhpmcp/", "--parent-window=0"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env)
 def read():
     n = struct.unpack("=I", p.stdout.read(4))[0]
     return json.loads(p.stdout.read(n))
