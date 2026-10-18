@@ -15,6 +15,10 @@ chromectl open <url> [window]  # open a new tab, in that window or the last focu
 chromectl close <tab-id>
 ```
 
+`list --json` prints a JSON array of `{id, window, active, title, url}`;
+`open --json <url>` prints `{id, window}`. Put `--json` before the arguments.
+Give `open` a full URL: `https://www.orf.at`, not `www.orf.at`.
+
 Tab ids are Chrome's own and reset when Chrome restarts. Find a tab by its URL
 with `chromectl list`, then act on its id.
 
