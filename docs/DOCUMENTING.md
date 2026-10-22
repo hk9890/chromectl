@@ -23,7 +23,6 @@ and return nothing:
 
 | File | Create when |
 |---|---|
-| `docs/RELEASING.md` | a release exists: a tag, a built artifact, a Web Store listing |
 | `docs/MONITORING.md` | the host writes a log file; today its stderr is Chrome's, see [RUNNING.md](RUNNING.md) |
 | `CONTRIBUTING.md` | someone other than the author builds from source |
 | `docs/design/decisions.md` | a design decision is superseded |

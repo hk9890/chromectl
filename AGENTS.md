@@ -56,6 +56,13 @@ diff.** It carries the rules a finished change is held to: what happens to
 Chrome's error text on the way to the caller, and what the one sentinel error
 must say.
 
+### Cutting a release
+
+**MUST read [docs/RELEASING.md](docs/RELEASING.md) before creating a tag,
+dispatching `release.yml`, or editing `CHANGELOG.md` or `.goreleaser.yaml`.**
+The dispatched ref must be the tagged commit, and the live Chrome check comes
+before the tag.
+
 ### Running chromectl by hand
 
 **MUST read [docs/RUNNING.md](docs/RUNNING.md) before running anything that

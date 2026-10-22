@@ -1,0 +1,69 @@
+version: 2
+
+project_name: chromectl
+
+builds:
+  - id: chromectl
+    main: ./cmd/chromectl
+    binary: chromectl
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/hk9890/chromectl/internal/build.Version={{ .Version }}
+      - -X github.com/hk9890/chromectl/internal/build.Commit={{ .ShortCommit }}
+      - -X github.com/hk9890/chromectl/internal/build.Date={{ .Date }}
+    # Linux only: the native messaging manifest and the socket are Linux's
+    # (docs/design/product.md, Scope).
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: chromectl-archives
+    ids:
+      - chromectl
+    formats:
+      - tar.gz
+    # The binary alone: it embeds the extension, and `chromectl install`
+    # writes it out. A pattern that matches nothing replaces GoReleaser's
+    # default of adding README, LICENSE and CHANGELOG.
+    files:
+      - none*
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ if eq .Arch "amd64" }}x64{{ else }}{{ .Arch }}{{ end }}
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+
+release:
+  # Re-dispatching against an existing tag replaces its assets instead of
+  # failing (docs/RELEASING.md).
+  replace_existing_artifacts: true
+
+# The release notes are the version's CHANGELOG.md section, passed with
+# --release-notes (scripts/release-notes). The changelog pipe reads that file,
+# so it must stay enabled: `changelog.disable` publishes an empty body.
+
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - --yes
+      - --output-signature=${signature}
+      - --output-certificate=${certificate}
+      - ${artifact}
+
+sboms:
+  - artifacts: archive
+    cmd: syft
+    args:
+      - "${artifact}"
+      - "--output"
+      - "spdx-json=${document}"
