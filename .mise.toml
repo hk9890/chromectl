@@ -12,14 +12,20 @@ CGO_ENABLED = "0"
 
 [tasks.build]
 description = "Build the chromectl binary into ./bin"
-run = "go build -o bin/chromectl ./cmd/chromectl"
+run = """
+VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
+DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+PKG=github.com/hk9890/chromectl/internal/build
+go build -ldflags "-s -w -X $PKG.Version=$VERSION -X $PKG.Commit=$COMMIT -X $PKG.Date=$DATE" -o bin/chromectl ./cmd/chromectl
+"""
 
 [tasks.chromectl]
 description = "Build from source and run in your shell's directory. Usage: mise run chromectl -- <args>"
 run = 'cd "$MISE_PROJECT_ROOT" && go build -o bin/chromectl ./cmd/chromectl && cd "${MISE_ORIGINAL_CWD:-$PWD}" && exec "$MISE_PROJECT_ROOT/bin/chromectl"'
 
 [tasks.install]
-description = "Build, then register ./bin/chromectl as the extension's native messaging host"
+description = "Build, then copy ./bin/chromectl and the extension to ~/.local/share/chromectl and register the copy"
 depends = ["build"]
 run = "./bin/chromectl install"
 
@@ -32,13 +38,13 @@ run = 'python3 scripts/fakechrome.py "$(mktemp -d)"'
 
 [tasks.fmt]
 description = "Format Go source (goimports)"
-run = "goimports -local github.com/hk9890/chromectl -w cmd internal"
+run = "goimports -local github.com/hk9890/chromectl -w embed.go cmd internal"
 
 [tasks."fmt:check"]
 description = "Fail if any file is not formatted"
 run = """
 # 2>&1 folds goimports' own diagnostics into $OUT so a broken run cannot pass.
-OUT=$(goimports -local github.com/hk9890/chromectl -l cmd internal 2>&1) || { echo "goimports failed:"; echo "$OUT"; exit 1; }
+OUT=$(goimports -local github.com/hk9890/chromectl -l embed.go cmd internal 2>&1) || { echo "goimports failed:"; echo "$OUT"; exit 1; }
 if [ -n "$OUT" ]; then echo "unformatted:"; echo "$OUT"; exit 1; fi
 """
 

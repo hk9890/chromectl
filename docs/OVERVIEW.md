@@ -16,11 +16,13 @@ chromectl list ──unix socket──▶ chromectl host ◀──stdin/stdout�
 
 | Path | Holds |
 |---|---|
-| `cmd/chromectl/` | The CLI, the `install` command, and the `host` entry. |
+| `embed.go` | Embeds `extension/` into the binary, for `install` to write out. |
+| `cmd/chromectl/` | The CLI, the `install` and `version` commands, and the `host` entry. |
 | `internal/proto/` | The one message shape both sides speak, plus the extension id and host name. |
 | `internal/native/` | Chrome's framing: 4-byte native-endian length, then JSON. |
 | `internal/hostd/` | The host: numbers each request, relays it, returns the reply to the socket connection that asked. |
 | `internal/client/` | The CLI's side of the socket, and where the socket lives. |
+| `internal/build/` | The version `mise run build` stamps in. |
 | `extension/` | The MV3 extension. Its `key` fixes the id. |
 | `scripts/fakechrome.py` | A scripted Chrome on the host's pipes, for driving headless. |
 

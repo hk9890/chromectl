@@ -26,7 +26,8 @@ Chrome owns tab identity, and chromectl does not pretend otherwise.
 
 ## Surface
 
-Four commands: `list`, `activate`, `open`, `close`. Output is for machines
+Four commands act on tabs: `list`, `activate`, `open`, `close`. Beside them,
+`install` sets chromectl up and `version` prints the release it is. Output is for machines
 first: one tab per line, tab-separated, ids in the leading columns, so a
 caller reads it with `cut` or a split and never parses prose. An error from
 Chrome reaches the caller verbatim, with exit code 1; chromectl adds nothing
@@ -45,6 +46,16 @@ commands take `--json` and whose action commands do not.
 One binary, one unpacked extension, one manifest write. There is no daemon the
 user starts, enables, or notices: Chrome starts the host when the extension
 connects and stops it when Chrome exits.
+
+The binary carries the extension inside it, and `chromectl install` writes both
+to `~/.local/share/chromectl/`: a copy of the running binary, and the
+extension beside it. The manifest names that copy, and the user loads the
+extension from there. A release installed by mise lives in a directory named
+after its version, so a manifest that named the running binary would keep
+starting the old version after an upgrade, and an extension loaded from it
+would vanish with the old version's directory. One fixed directory makes an
+upgrade `mise upgrade`, `chromectl install`, and a reload of the extension's
+card; nothing is loaded again from a new path.
 
 The extension id is fixed by a public key in its manifest. Without that, an
 unpacked extension's id would depend on the directory it was loaded from, and

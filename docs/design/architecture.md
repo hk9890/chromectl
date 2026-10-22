@@ -81,11 +81,13 @@ cost of depending on those.
 | Path | Holds |
 |---|---|
 | `extension/` | The MV3 extension. `manifest.json` carries the public key that fixes the id; `background.js` is the command table and the port. |
-| `cmd/chromectl/` | The CLI, `install`, and the `host` entry. |
+| `embed.go` | The extension, embedded so a released binary can install it. |
+| `cmd/chromectl/` | The CLI, `install`, `version`, and the `host` entry. |
 | `internal/proto/` | The one message shape both protocols carry, and the two constants the manifest and the extension must agree on. |
 | `internal/native/` | Chrome's framing. |
 | `internal/hostd/` | The relay. |
 | `internal/client/` | The CLI's side of the socket, and where the socket lives. |
+| `internal/build/` | The version the build stamps in. |
 
 ## Consumers
 
