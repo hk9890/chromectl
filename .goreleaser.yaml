@@ -29,11 +29,11 @@ archives:
       - chromectl
     formats:
       - tar.gz
-    # The binary alone: it embeds the extension, and `chromectl install`
-    # writes it out. A pattern that matches nothing replaces GoReleaser's
+    # The binary and its LICENSE: the binary embeds the extension, and
+    # `chromectl install` writes it out. Listing LICENSE replaces GoReleaser's
     # default of adding README, LICENSE and CHANGELOG.
     files:
-      - none*
+      - LICENSE
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ if eq .Arch "amd64" }}x64{{ else }}{{ .Arch }}{{ end }}
 

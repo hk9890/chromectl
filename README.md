@@ -24,6 +24,8 @@ with `chromectl list`, then act on its id.
 
 ## Install
 
+Linux only, x64 and arm64.
+
 With [mise](https://mise.jdx.dev), which reads the releases page and puts
 `chromectl` on your PATH:
 
@@ -33,11 +35,11 @@ chromectl install
 ```
 
 Or download `chromectl_<version>_linux_<x64|arm64>.tar.gz` from the
-[releases page](https://github.com/hk9890/chromectl/releases) and unpack it
-into a directory on your PATH:
+[releases page](https://github.com/hk9890/chromectl/releases) and unpack the
+binary into a directory on your PATH:
 
 ```
-tar -xzf chromectl_<version>_linux_x64.tar.gz -C ~/.local/bin
+tar -xzf chromectl_<version>_linux_x64.tar.gz -C ~/.local/bin chromectl
 chromectl install
 ```
 

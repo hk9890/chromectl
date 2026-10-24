@@ -5,8 +5,8 @@
 and tests before it publishes.
 
 A release carries two archives, `chromectl_<version>_linux_x64.tar.gz` and
-`…_linux_arm64.tar.gz`, each holding `chromectl` alone; the binary embeds the
-extension. Beside them: one SPDX SBOM per archive, a checksums file signed
+`…_linux_arm64.tar.gz`, each holding `chromectl` and `LICENSE`; the binary embeds
+the extension. Beside them: one SPDX SBOM per archive, a checksums file signed
 keyless with cosign (`.sig` and `.pem`), and SLSA build provenance. The archive
 names let `mise use -g github:hk9890/chromectl` pick the right asset.
 
