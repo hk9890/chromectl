@@ -1,4 +1,5 @@
-// Package build carries the version stamped in by the build task.
+// Package build carries the version stamped in by the build task and by
+// GoReleaser.
 package build
 
 var (

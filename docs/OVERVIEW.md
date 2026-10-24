@@ -22,7 +22,7 @@ chromectl list ──unix socket──▶ chromectl host ◀──stdin/stdout�
 | `internal/native/` | Chrome's framing: 4-byte native-endian length, then JSON. |
 | `internal/hostd/` | The host: numbers each request, relays it, returns the reply to the socket connection that asked. |
 | `internal/client/` | The CLI's side of the socket, and where the socket lives. |
-| `internal/build/` | The version `mise run build` stamps in. |
+| `internal/build/` | The version `mise run build` and `.goreleaser.yaml` stamp in. |
 | `extension/` | The MV3 extension. Its `key` fixes the id. |
 | `scripts/fakechrome.py` | A scripted Chrome on the host's pipes, for driving headless. |
 
