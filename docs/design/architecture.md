@@ -76,16 +76,25 @@ and asks for `<all_urls>` and script execution for features chromectl does not
 want to carry. The cost of owning sixty lines of extension is lower than the
 cost of depending on those.
 
+**The manifest names the running binary.** No copy and no embedded extension:
+the manifest points at whatever binary ran `install`, and the user loads
+`extension/` from where it lies. A release installed by mise lives in a
+directory named after its version, so after an upgrade the manifest would keep
+starting the old version, and an extension loaded from it would vanish with the
+old version's directory. `install` copies both to one fixed directory instead.
+
 ## Layout
 
 | Path | Holds |
 |---|---|
 | `extension/` | The MV3 extension. `manifest.json` carries the public key that fixes the id; `background.js` is the command table and the port. |
-| `cmd/chromectl/` | The CLI, `install`, and the `host` entry. |
+| `embed.go` | The extension, embedded so a released binary can install it. |
+| `cmd/chromectl/` | The CLI, `install`, `version`, and the `host` entry. |
 | `internal/proto/` | The one message shape both protocols carry, and the two constants the manifest and the extension must agree on. |
 | `internal/native/` | Chrome's framing. |
 | `internal/hostd/` | The relay. |
 | `internal/client/` | The CLI's side of the socket, and where the socket lives. |
+| `internal/build/` | The version the build stamps in. |
 
 ## Consumers
 

@@ -7,11 +7,15 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/hk9890/chromectl"
+	"github.com/hk9890/chromectl/internal/build"
 	"github.com/hk9890/chromectl/internal/client"
 	"github.com/hk9890/chromectl/internal/hostd"
 	"github.com/hk9890/chromectl/internal/proto"
@@ -25,7 +29,9 @@ const usage = `usage: chromectl <command> [args]
   open [--json] <url> [window] open url in a new tab, in the given window or the
                                last focused one; prints its id and window
   close <tab-id>               close the tab
-  install                      register this binary as the extension's native messaging host
+  install                      copy this binary and the extension to ~/.local/share/chromectl
+                               and register that copy as the native messaging host
+  version                      print the version
   host                         the native messaging host; Chrome starts this, not you
 `
 
@@ -51,9 +57,11 @@ func main() {
 	case "open":
 		err = open(args)
 	case "install":
-		err = install()
+		err = install(args)
 	case "host":
 		err = hostd.Run(os.Stdin, os.Stdout, client.SocketPath())
+	case "version", "--version":
+		fmt.Printf("chromectl %s (%s, %s)\n", build.Version, build.Commit, build.Date)
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 	default:
@@ -141,39 +149,52 @@ func printJSON(v any) error {
 	return enc.Encode(v)
 }
 
-// install writes the native messaging manifest into every Chrome-family
-// config directory that exists, pointing at this binary.
-func install() error {
-	exe, err := os.Executable()
+// install copies this binary and the extension to one directory whose path
+// no upgrade changes, then writes the native messaging manifest into every
+// Chrome-family config directory that exists, pointing at that copy.
+func install(args []string) error {
+	if len(args) != 0 {
+		return fmt.Errorf("install takes no arguments")
+	}
+	data, err := xdgDir("XDG_DATA_HOME", ".local/share")
 	if err != nil {
 		return err
 	}
-	if exe, err = filepath.EvalSymlinks(exe); err != nil {
+	cfg, err := xdgDir("XDG_CONFIG_HOME", ".config")
+	if err != nil {
 		return err
 	}
+	var browserDirs []string
+	for _, browser := range []string{"google-chrome", "google-chrome-beta", "google-chrome-unstable", "chromium", "BraveSoftware/Brave-Browser"} {
+		dir := filepath.Join(cfg, browser)
+		if _, err := os.Stat(dir); err == nil {
+			browserDirs = append(browserDirs, dir)
+		}
+	}
+	if len(browserDirs) == 0 {
+		return fmt.Errorf("no Chrome-family config directory found under %s", cfg)
+	}
+
+	dir := filepath.Join(data, "chromectl")
+	host := filepath.Join(dir, "chromectl")
+	if err := copySelf(host); err != nil {
+		return err
+	}
+	extDir := filepath.Join(dir, "extension")
+	if err := writeExtension(extDir); err != nil {
+		return err
+	}
+
 	manifest, _ := json.MarshalIndent(map[string]any{
 		"name":            proto.HostName,
 		"description":     "chromectl native messaging host",
-		"path":            exe,
+		"path":            host,
 		"type":            "stdio",
 		"allowed_origins": []string{"chrome-extension://" + proto.ExtensionID + "/"},
 	}, "", "  ")
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	cfg := os.Getenv("XDG_CONFIG_HOME")
-	if cfg == "" {
-		cfg = filepath.Join(home, ".config")
-	}
 	var written []string
-	for _, browser := range []string{"google-chrome", "google-chrome-beta", "google-chrome-unstable", "chromium", "BraveSoftware/Brave-Browser"} {
-		dir := filepath.Join(cfg, browser)
-		if _, err := os.Stat(dir); err != nil {
-			continue
-		}
-		path := filepath.Join(dir, "NativeMessagingHosts", proto.HostName+".json")
+	for _, browserDir := range browserDirs {
+		path := filepath.Join(browserDir, "NativeMessagingHosts", proto.HostName+".json")
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return err
 		}
@@ -182,18 +203,73 @@ func install() error {
 		}
 		written = append(written, path)
 	}
-	if len(written) == 0 {
-		return fmt.Errorf("no Chrome-family config directory found under %s", cfg)
-	}
-	fmt.Printf("wrote:\n  %s\n\nnow load %s as an unpacked extension at chrome://extensions (id %s)\n",
-		strings.Join(written, "\n  "), extensionDir(), proto.ExtensionID)
+	fmt.Printf("installed %s and %s\nwrote:\n  %s\n\n"+
+		"first install: load %s as an unpacked extension at chrome://extensions (id %s)\n"+
+		"upgrade: click reload on the chromectl card at chrome://extensions\n",
+		host, extDir, strings.Join(written, "\n  "), extDir, proto.ExtensionID)
 	return nil
 }
 
-func extensionDir() string {
+// xdgDir reads an XDG base directory variable, or returns fallback under the
+// home directory. The spec makes a relative value invalid, and Chrome refuses
+// a relative host path in the manifest.
+func xdgDir(name, fallback string) (string, error) {
+	if dir := os.Getenv(name); filepath.IsAbs(dir) {
+		return dir, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, fallback), nil
+}
+
+// copySelf puts a copy of the running binary at dst. It renames a temporary
+// file over dst, because a host Chrome runs from dst cannot be written in place.
+func copySelf(dst string) error {
 	exe, err := os.Executable()
 	if err != nil {
-		return "extension/"
+		return err
 	}
-	return filepath.Join(filepath.Dir(filepath.Dir(exe)), "extension")
+	src, err := os.Open(exe)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = src.Close() }()
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(dst), ".chromectl-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if _, err := io.Copy(tmp, src); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), dst)
+}
+
+// writeExtension replaces dir with the embedded extension, so no file a
+// previous version had is left behind.
+func writeExtension(dir string) error {
+	ext, err := fs.Sub(chromectl.Extension, "extension")
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	return os.CopyFS(dir, ext)
 }

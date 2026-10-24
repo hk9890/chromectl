@@ -30,18 +30,21 @@ Requires Go 1.27, or [mise](https://mise.jdx.dev), which installs it.
 mise run install
 ```
 
-That builds `./bin/chromectl` and writes the native messaging manifest into
-every Chrome-family config directory under `~/.config`: Chrome, Chrome beta and
-unstable, Chromium, Brave. Rerun it after moving the binary; the manifest holds
-its absolute path.
+That builds `./bin/chromectl` and runs `chromectl install`, which copies the
+binary and the extension to `~/.local/share/chromectl/` and writes the native
+messaging manifest into every Chrome-family config directory under
+`~/.config`: Chrome, Chrome beta and unstable, Chromium, Brave.
 
-Then load the `extension/` directory as an unpacked extension at
+Then load `~/.local/share/chromectl/extension` as an unpacked extension at
 `chrome://extensions` with Developer mode on. Its id is
 `mpnpeobidlmllklmdpnkhhhblkbhpmcp`, fixed by the `key` in its manifest, so the
 manifest already allows it.
 
-`chromectl list` now works. If it says no host is listening, the extension's
-service worker console at `chrome://extensions` shows the reason.
+`./bin/chromectl list` now works. If it says no host is listening, the
+extension's service worker console at `chrome://extensions` shows the reason.
+
+To upgrade, pull and run `mise run install` again, then click reload on the
+chromectl card at `chrome://extensions`.
 
 ## License
 

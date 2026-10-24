@@ -28,12 +28,17 @@ destructive. Confirm before any of the last three.
 
 Run `mise run chromectl -- <args>` to rebuild and call the CLI in one step.
 
-Setup, once, and only when asked:
+Setup, only when asked:
 
-1. `mise run install` writes the manifest with the absolute path of
-   `./bin/chromectl`; a rebuild in place needs no rerun, a move does.
-2. The user loads `extension/` unpacked at `chrome://extensions`. An agent
-   cannot do this step.
+1. `mise run install` copies `./bin/chromectl` and the extension to
+   `~/.local/share/chromectl/` and writes the manifest naming that copy.
+2. The user loads `~/.local/share/chromectl/extension` unpacked at
+   `chrome://extensions`, once. An agent cannot do this step.
+
+To put a change in front of the live Chrome, rerun step 1, then the user clicks
+reload on the chromectl card. Both are needed for any change: Chrome runs the
+copy, not `./bin/chromectl`, and the host it started keeps running the old copy
+until the reload restarts it.
 
 ## Where output lands
 
