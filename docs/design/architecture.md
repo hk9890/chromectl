@@ -76,6 +76,13 @@ and asks for `<all_urls>` and script execution for features chromectl does not
 want to carry. The cost of owning sixty lines of extension is lower than the
 cost of depending on those.
 
+**The manifest names the running binary.** No copy and no embedded extension:
+the manifest points at whatever binary ran `install`, and the user loads
+`extension/` from where it lies. A release installed by mise lives in a
+directory named after its version, so after an upgrade the manifest would keep
+starting the old version, and an extension loaded from it would vanish with the
+old version's directory. `install` copies both to one fixed directory instead.
+
 ## Layout
 
 | Path | Holds |

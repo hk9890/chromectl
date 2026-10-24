@@ -50,12 +50,10 @@ connects and stops it when Chrome exits.
 The binary carries the extension inside it, and `chromectl install` writes both
 to `~/.local/share/chromectl/`: a copy of the running binary, and the
 extension beside it. The manifest names that copy, and the user loads the
-extension from there. A release installed by mise lives in a directory named
-after its version, so a manifest that named the running binary would keep
-starting the old version after an upgrade, and an extension loaded from it
-would vanish with the old version's directory. One fixed directory makes an
-upgrade `mise upgrade`, `chromectl install`, and a reload of the extension's
-card; nothing is loaded again from a new path.
+extension from there. One fixed directory makes an upgrade `mise upgrade`,
+`chromectl install`, and a reload of the extension's card; nothing is loaded
+again from a new path. Why the manifest does not name the running binary is in
+[architecture.md](architecture.md#rejected-alternatives).
 
 The extension id is fixed by a public key in its manifest. Without that, an
 unpacked extension's id would depend on the directory it was loaded from, and
