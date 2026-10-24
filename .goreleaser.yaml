@@ -37,9 +37,6 @@ archives:
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ if eq .Arch "amd64" }}x64{{ else }}{{ .Arch }}{{ end }}
 
-checksum:
-  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
-
 release:
   # Re-dispatching against an existing tag replaces its assets instead of
   # failing (docs/RELEASING.md).

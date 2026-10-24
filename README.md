@@ -33,8 +33,13 @@ chromectl install
 ```
 
 Or download `chromectl_<version>_linux_<x64|arm64>.tar.gz` from the
-[releases page](https://github.com/hk9890/chromectl/releases), unpack it, and
-run `./chromectl install`.
+[releases page](https://github.com/hk9890/chromectl/releases) and unpack it
+into a directory on your PATH:
+
+```
+tar -xzf chromectl_<version>_linux_x64.tar.gz -C ~/.local/bin
+chromectl install
+```
 
 `chromectl install` copies the binary and the extension it carries to
 `~/.local/share/chromectl/` and writes the native messaging manifest into
@@ -49,11 +54,9 @@ manifest already allows it.
 `chromectl list` now works. If it says no host is listening, the extension's
 service worker console at `chrome://extensions` shows the reason.
 
-To upgrade, run `mise upgrade chromectl` and `chromectl install`, then click
-reload on the chromectl card at `chrome://extensions`.
-
-From source instead: `mise run install` in a checkout builds `./bin/chromectl`
-and runs its `install`.
+To upgrade, run `mise upgrade github:hk9890/chromectl`, or unpack the new
+archive the same way, then run `chromectl install` and click reload on the
+chromectl card at `chrome://extensions`.
 
 ## License
 

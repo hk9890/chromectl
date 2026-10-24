@@ -13,7 +13,8 @@ from the command line, through a small extension that Chrome runs.
   `open --json` prints them as a JSON object.
 - `chromectl close <tab-id>` closes the tab.
 - `chromectl install` copies chromectl and its extension to
-  `~/.local/share/chromectl/` and registers it with Chrome, Chrome beta and
-  unstable, Chromium and Brave. Load `~/.local/share/chromectl/extension` once
-  at `chrome://extensions`.
-- `chromectl version` prints the installed version.
+  `~/.local/share/chromectl/` and registers it with every installed Chrome,
+  Chrome beta and unstable, Chromium and Brave. Install a browser later, and
+  run `chromectl install` again. Load `~/.local/share/chromectl/extension` once
+  as an unpacked extension at `chrome://extensions`, with Developer mode on.
+- `chromectl version` prints its version, commit and build date.

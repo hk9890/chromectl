@@ -37,13 +37,13 @@ cosign is pinned to v2.6.5 in `release.yml`: v3 defaults to
    git push origin vX.Y.Z
    ```
 
-6. Dispatch the workflow and watch it. The run takes a few seconds to
-   register; rerun the lookup if it prints nothing. A tag with no
+6. Dispatch the workflow and watch the run whose URL it prints; on a
+   re-dispatch, a lookup by tag can return the previous run. A tag with no
    `CHANGELOG.md` section fails before anything is published.
 
    ```bash
    gh workflow run release.yml --ref vX.Y.Z
-   gh run watch "$(gh run list --workflow=release.yml --branch vX.Y.Z --limit 1 --json databaseId -q '.[0].databaseId')" --exit-status
+   gh run watch <run id, the last part of that URL> --exit-status
    ```
 
 7. Verify: two archives, two `.sbom.json`, `…_checksums.txt` with its `.sig`
@@ -52,8 +52,9 @@ cosign is pinned to v2.6.5 in `release.yml`: v3 defaults to
 
    ```bash
    gh release view vX.Y.Z --json assets,body -q '.body, (.assets[].name)'
-   gh release download vX.Y.Z -p '*_linux_x64.tar.gz' -D "$(mktemp -d)"
-   gh attestation verify <that dir>/chromectl_X.Y.Z_linux_x64.tar.gz -R hk9890/chromectl
+   dir=$(mktemp -d)
+   gh release download vX.Y.Z -p '*_linux_x64.tar.gz' -D "$dir"
+   gh attestation verify "$dir"/chromectl_X.Y.Z_linux_x64.tar.gz -R hk9890/chromectl
    ```
 
 **The dispatched ref must be the tagged commit.** The workflow file is read from

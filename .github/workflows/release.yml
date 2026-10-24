@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+# Two runs against one tag would replace each other's assets mid-upload.
+concurrency:
+  group: release-${{ github.ref }}
+
 jobs:
   release:
     name: Build and publish release assets
@@ -28,11 +32,9 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-
-      # `go build ./...` writes no binary. A binary at the repository root
-      # leaves the tree dirty, and GoReleaser refuses a dirty tree.
-      - name: build
-        run: go build ./...
+          # A restored build cache would link objects compiled by another run
+          # into the published binaries.
+          cache: false
 
       - name: vet
         run: go vet ./...
@@ -63,6 +65,9 @@ jobs:
           args: release --clean --release-notes ${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The release is for the dispatched tag, the one the notes are for,
+          # even when another tag points at the same commit.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
 
       - name: Generate SLSA build provenance for release archives
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
