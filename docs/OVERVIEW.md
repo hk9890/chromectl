@@ -45,4 +45,5 @@ rg -n 'json:"' internal/proto/proto.go           # every field on the wire
 - Native messaging: <https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging>
 - Service worker lifetime: <https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle>
 - revier (<https://github.com/hk9890/revier>) is the first consumer; it execs
-  `chromectl` from an adapter the way it execs `wctl`.
+  `chromectl` from an adapter the way it execs `wctl`
+  (<https://github.com/carlo9890/gnome-window-control>).
