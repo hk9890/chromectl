@@ -66,9 +66,10 @@ After a run that failed on a network or GitHub error, run steps 6 and 7 of
 *Cut a release* again. After any other failure:
 
 1. Land the fix by PR.
-2. Run `git log --oneline vX.Y.Z..origin/main`. When it lists more than the
-   fix, cut the next version through *Cut a release* instead: the moved tag
-   would ship changes its `CHANGELOG.md` section does not name.
+2. Run `git fetch origin && git log --oneline vX.Y.Z..origin/main`. When it
+   lists more than the fix, cut the next version through *Cut a release*
+   instead: the moved tag would ship changes its `CHANGELOG.md` section does
+   not name.
 3. Run steps 3 and 4 of *Cut a release* again, on the new `main`.
 4. Move the tag onto it:
 
