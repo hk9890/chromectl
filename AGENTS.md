@@ -59,7 +59,8 @@ must say.
 ### Cutting a release
 
 **MUST read [docs/RELEASING.md](docs/RELEASING.md) before creating a tag,
-dispatching `release.yml`, or editing `CHANGELOG.md` or `.goreleaser.yaml`.**
+dispatching or editing `release.yml`, or editing `CHANGELOG.md` or
+`.goreleaser.yaml`.**
 The dispatched ref must be the tagged commit, and the live Chrome check comes
 before the tag.
 

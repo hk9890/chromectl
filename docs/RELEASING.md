@@ -1,18 +1,13 @@
 # Releasing
 
-`.github/workflows/release.yml` publishes a release with GoReleaser
-(`.goreleaser.yaml`), dispatched by hand against a release tag. The run vets
-and tests before it publishes.
+Dispatch `.github/workflows/release.yml` by hand against a release tag; it vets,
+tests, and publishes with GoReleaser (`.goreleaser.yaml`).
 
-A release carries two archives, `chromectl_<version>_linux_x64.tar.gz` and
-`…_linux_arm64.tar.gz`, each holding `chromectl` and `LICENSE`; the binary embeds
-the extension. Beside them: one SPDX SBOM per archive, a checksums file signed
-keyless with cosign (`.sig` and `.pem`), and SLSA build provenance. The archive
-names let `mise use -g github:hk9890/chromectl` pick the right asset.
-
-cosign is pinned to v2.6.5 in `release.yml`: v3 defaults to
-`--new-bundle-format`, which rejects the `--output-signature` and
-`--output-certificate` flags in `.goreleaser.yaml`.
+- Keep cosign at v2 in `release.yml`; the comment there says why.
+- Keep the archive `name_template`: `mise use -g github:hk9890/chromectl` picks
+  the asset by it, and `README.md` names the archive in its download and `tar`
+  lines.
+- Change `archives.files` together with the archive contents step 7 checks.
 
 ## Cut a release
 
@@ -30,7 +25,8 @@ cosign is pinned to v2.6.5 in `release.yml`: v3 defaults to
 4. Check the build on the live Chrome ([RUNNING.md](RUNNING.md)): run
    `mise run install`, the user reloads the chromectl card, then
    `./bin/chromectl list` answers. The Go tests cannot see the extension.
-5. Tag and push:
+5. Tag and push as a repository admin; the `v*` tag ruleset rejects a tag
+   created, moved or deleted by anyone else.
 
    ```bash
    git tag -a vX.Y.Z -m "chromectl vX.Y.Z"
@@ -46,22 +42,39 @@ cosign is pinned to v2.6.5 in `release.yml`: v3 defaults to
    gh run watch <run id, the last part of that URL> --exit-status
    ```
 
-7. Verify: two archives, two `.sbom.json`, `…_checksums.txt` with its `.sig`
-   and `.pem`, and a body that is the tag's `CHANGELOG.md` section. An empty
-   body is repaired with `gh release edit vX.Y.Z --notes-file`, no re-dispatch.
+7. Verify: two archives, `_linux_x64` and `_linux_arm64`, each holding
+   `chromectl` and `LICENSE`; two `.sbom.json`; `…_checksums.txt` with its
+   `.sig` and `.pem`; and a body that is the tag's `CHANGELOG.md` section. An
+   empty body is repaired with `gh release edit vX.Y.Z --notes-file`, no
+   re-dispatch.
 
    ```bash
    gh release view vX.Y.Z --json assets,body -q '.body, (.assets[].name)'
    dir=$(mktemp -d)
    gh release download vX.Y.Z -p '*_linux_x64.tar.gz' -D "$dir"
+   tar -tzf "$dir"/chromectl_X.Y.Z_linux_x64.tar.gz
    gh attestation verify "$dir"/chromectl_X.Y.Z_linux_x64.tar.gz -R hk9890/chromectl
    ```
 
-**The dispatched ref must be the tagged commit.** The workflow file is read from
-that ref, and GoReleaser refuses a checkout that is not the tag. A
-`release.yml` fix a release needs lands by PR first; then move the tag onto the
-new `main` with `git tag -f -a` and `git push -f origin vX.Y.Z`, and dispatch
-again. A re-dispatch replaces the assets (`release.replace_existing_artifacts`).
+## Fix a failed release
+
+The dispatched ref must be the tagged commit: the workflow file is read from
+that ref, and GoReleaser refuses a checkout that is not the tag.
+
+After a run that failed on a network or GitHub error, run steps 6 and 7 of
+*Cut a release* again. After any other failure:
+
+1. Land the fix by PR.
+2. Run steps 3 and 4 of *Cut a release* again, on the new `main`.
+3. Move the tag onto it:
+
+   ```bash
+   git tag -f -a vX.Y.Z -m "chromectl vX.Y.Z"
+   git push -f origin vX.Y.Z
+   ```
+
+4. Run steps 6 and 7 of *Cut a release* again. A re-dispatch replaces the
+   assets (`release.replace_existing_artifacts`).
 
 ## What goes in the CHANGELOG section
 
