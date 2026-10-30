@@ -5,9 +5,9 @@ tests, and publishes with GoReleaser (`.goreleaser.yaml`).
 
 - Keep cosign at v2 in `release.yml`; the comment there says why.
 - Keep the archive `name_template`: `mise use -g github:hk9890/chromectl` picks
-  the asset by it.
-- Change `archives.files` together with the unpack command in `README.md` and
-  the asset list in step 7.
+  the asset by it, and `README.md` names the archive in its download and `tar`
+  lines.
+- Change `archives.files` together with the asset list in step 7.
 
 ## Cut a release
 
