@@ -59,27 +59,21 @@ tests, and publishes with GoReleaser (`.goreleaser.yaml`).
 
 ## Fix a failed release
 
-The dispatched ref must be the tagged commit: the workflow file is read from
-that ref, and GoReleaser refuses a checkout that is not the tag.
+Leave a pushed tag where it is. proxy.golang.org keeps the first commit it
+sees for a version, so a moved tag breaks `go install …@vX.Y.Z` with a
+checksum error.
 
 After a run that failed on a network or GitHub error, run steps 6 and 7 of
-*Cut a release* again. After any other failure:
+*Cut a release* again; a re-dispatch replaces the assets
+(`release.replace_existing_artifacts`). After any other failure, ship the fix
+as the next version:
 
-1. Land the fix by PR.
-2. Run `git fetch origin && git log --oneline vX.Y.Z..origin/main`. When it
-   lists more than the fix, cut the next version through *Cut a release*
-   instead: the moved tag would ship changes its `CHANGELOG.md` section does
-   not name.
-3. Run steps 3 and 4 of *Cut a release* again, on the new `main`.
-4. Move the tag onto it:
-
-   ```bash
-   git tag -f -a vX.Y.Z -m "chromectl vX.Y.Z"
-   git push -f origin vX.Y.Z
-   ```
-
-5. Run steps 6 and 7 of *Cut a release* again. A re-dispatch replaces the
-   assets (`release.replace_existing_artifacts`).
+1. Land the fix by PR. In it, rename the `## vX.Y.Z` section of
+   `CHANGELOG.md` to the next version, so its entries ship there, and set that
+   version in `extension/manifest.json`.
+2. Delete the GitHub release the failed run published, if any, and keep the
+   tag: `gh release delete vX.Y.Z --yes`.
+3. Run *Cut a release* from step 3 for the next version.
 
 ## What goes in the CHANGELOG section
 
