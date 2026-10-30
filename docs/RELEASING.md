@@ -35,7 +35,8 @@ tests, and publishes with GoReleaser (`.goreleaser.yaml`).
 
 6. Dispatch the workflow and watch the run whose URL it prints; on a
    re-dispatch, a lookup by tag can return the previous run. A tag with no
-   `CHANGELOG.md` section fails before anything is published.
+   `CHANGELOG.md` section, or with a different version in
+   `extension/manifest.json`, fails before anything is published.
 
    ```bash
    gh workflow run release.yml --ref vX.Y.Z
@@ -65,15 +66,18 @@ After a run that failed on a network or GitHub error, run steps 6 and 7 of
 *Cut a release* again. After any other failure:
 
 1. Land the fix by PR.
-2. Run steps 3 and 4 of *Cut a release* again, on the new `main`.
-3. Move the tag onto it:
+2. Run `git log --oneline vX.Y.Z..origin/main`. When it lists more than the
+   fix, cut the next version through *Cut a release* instead: the moved tag
+   would ship changes its `CHANGELOG.md` section does not name.
+3. Run steps 3 and 4 of *Cut a release* again, on the new `main`.
+4. Move the tag onto it:
 
    ```bash
    git tag -f -a vX.Y.Z -m "chromectl vX.Y.Z"
    git push -f origin vX.Y.Z
    ```
 
-4. Run steps 6 and 7 of *Cut a release* again. A re-dispatch replaces the
+5. Run steps 6 and 7 of *Cut a release* again. A re-dispatch replaces the
    assets (`release.replace_existing_artifacts`).
 
 ## What goes in the CHANGELOG section
