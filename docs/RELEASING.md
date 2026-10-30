@@ -7,7 +7,7 @@ tests, and publishes with GoReleaser (`.goreleaser.yaml`).
 - Keep the archive `name_template`: `mise use -g github:hk9890/chromectl` picks
   the asset by it, and `README.md` names the archive in its download and `tar`
   lines.
-- Change `archives.files` together with the asset list in step 7.
+- Change `archives.files` together with the archive contents step 7 checks.
 
 ## Cut a release
 
@@ -25,8 +25,8 @@ tests, and publishes with GoReleaser (`.goreleaser.yaml`).
 4. Check the build on the live Chrome ([RUNNING.md](RUNNING.md)): run
    `mise run install`, the user reloads the chromectl card, then
    `./bin/chromectl list` answers. The Go tests cannot see the extension.
-5. Tag and push. The `v*` tag ruleset lets only a repository admin create,
-   move or delete the tag.
+5. Tag and push as a repository admin; the `v*` tag ruleset rejects a tag
+   created, moved or deleted by anyone else.
 
    ```bash
    git tag -a vX.Y.Z -m "chromectl vX.Y.Z"
@@ -44,13 +44,15 @@ tests, and publishes with GoReleaser (`.goreleaser.yaml`).
 
 7. Verify: two archives, `_linux_x64` and `_linux_arm64`, each holding
    `chromectl` and `LICENSE`; two `.sbom.json`; `…_checksums.txt` with its
-   `.sig` and `.pem`; and a body that is the tag's `CHANGELOG.md` section. An empty
-   body is repaired with `gh release edit vX.Y.Z --notes-file`, no re-dispatch.
+   `.sig` and `.pem`; and a body that is the tag's `CHANGELOG.md` section. An
+   empty body is repaired with `gh release edit vX.Y.Z --notes-file`, no
+   re-dispatch.
 
    ```bash
    gh release view vX.Y.Z --json assets,body -q '.body, (.assets[].name)'
    dir=$(mktemp -d)
    gh release download vX.Y.Z -p '*_linux_x64.tar.gz' -D "$dir"
+   tar -tzf "$dir"/chromectl_X.Y.Z_linux_x64.tar.gz
    gh attestation verify "$dir"/chromectl_X.Y.Z_linux_x64.tar.gz -R hk9890/chromectl
    ```
 
@@ -59,17 +61,20 @@ tests, and publishes with GoReleaser (`.goreleaser.yaml`).
 The dispatched ref must be the tagged commit: the workflow file is read from
 that ref, and GoReleaser refuses a checkout that is not the tag.
 
+After a run that failed on a network or GitHub error, run steps 6 and 7 of
+*Cut a release* again. After any other failure:
+
 1. Land the fix by PR.
-2. Move the tag onto the new `main`:
+2. Run steps 3 and 4 of *Cut a release* again, on the new `main`.
+3. Move the tag onto it:
 
    ```bash
-   git switch main && git pull --ff-only
    git tag -f -a vX.Y.Z -m "chromectl vX.Y.Z"
    git push -f origin vX.Y.Z
    ```
 
-3. Run steps 6 and 7 again. A re-dispatch replaces the assets
-   (`release.replace_existing_artifacts`).
+4. Run steps 6 and 7 of *Cut a release* again. A re-dispatch replaces the
+   assets (`release.replace_existing_artifacts`).
 
 ## What goes in the CHANGELOG section
 
