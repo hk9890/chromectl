@@ -3,6 +3,7 @@ package hostd_test
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,7 +24,7 @@ func fakeExtension(t *testing.T, answer func(proto.Request) proto.Reply) (socket
 }
 
 // fakeExtensionAt starts a host on socket, which may already hold another
-// host's socket, and returns once this host has bound it.
+// host's socket, and returns once this host accepts on it.
 func fakeExtensionAt(t *testing.T, socket string, answer func(proto.Request) proto.Reply) (done func()) {
 	t.Helper()
 	toHost, fromExt := io.Pipe()
@@ -45,10 +46,7 @@ func fakeExtensionAt(t *testing.T, socket string, answer func(proto.Request) pro
 			}
 		}
 	}()
-	for start := time.Now(); ; time.Sleep(time.Millisecond) {
-		if now, err := os.Stat(socket); err == nil && (before == nil || !os.SameFile(before, now)) {
-			break
-		}
+	for start := time.Now(); !listening(socket, before); time.Sleep(time.Millisecond) {
 		if time.Since(start) > 2*time.Second {
 			t.Fatal("host never bound its socket")
 		}
@@ -59,6 +57,22 @@ func fakeExtensionAt(t *testing.T, socket string, answer func(proto.Request) pro
 			t.Errorf("Run returned %v after Chrome closed the pipe", err)
 		}
 	}
+}
+
+// listening reports whether a socket other than before is at the path and
+// accepts. The path appears at bind, before listen, so a file alone is not
+// a host that answers.
+func listening(socket string, before os.FileInfo) bool {
+	now, err := os.Stat(socket)
+	if err != nil || before != nil && os.SameFile(before, now) {
+		return false
+	}
+	conn, err := net.Dial("unix", socket)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
 
 func TestListReachesTheExtensionAndComesBack(t *testing.T) {
@@ -141,7 +155,7 @@ func TestAnOldHostExitingKeepsTheNewHostsSocket(t *testing.T) {
 		t.Fatalf("after the old host exited, Call = %v, want the new host's answer", err)
 	}
 	newDone()
-	if _, err := os.Stat(socket); !os.IsNotExist(err) {
-		t.Fatalf("the new host left its socket behind: %v", err)
+	if err := client.Call(socket, proto.Request{Cmd: "list"}, nil); err != client.ErrNoHost {
+		t.Fatalf("after every host exited, Call = %v, want ErrNoHost", err)
 	}
 }

@@ -89,8 +89,9 @@ the DevTools protocol and a test profile, not to a user's daily browser.
 
 | Condition | Behaviour |
 |---|---|
-| Chrome is not running | The socket is absent. The CLI names the three causes and exits 1. |
+| Chrome is not running | No host listens on the socket, absent or left behind. The CLI names the three causes and exits 1. |
 | The extension is disabled or not loaded | Same as above; the host was never started. |
 | The host crashed | The extension reconnects after two seconds. A call in that window fails cleanly. |
-| Chrome exits mid-call | The pending call gets "chrome went away" and the host exits, removing its socket. |
-| A stale socket from a killed host | The next host removes it on start. |
+| Chrome exits mid-call | The pending call gets "chrome went away" and the host exits, leaving its socket file. |
+| The extension is reloaded | The next host takes the socket before the old one exits; the next call reaches it. |
+| A socket left by an exited or killed host | The next host removes it on start. |

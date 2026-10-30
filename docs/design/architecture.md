@@ -21,7 +21,7 @@ chromectl list ──unix socket──▶ chromectl host ◀──stdin/stdout�
 | Process | Started by | Lives until | Holds |
 |---|---|---|---|
 | Extension service worker | Chrome, on browser start | Chrome exits. An open native port keeps an MV3 worker alive, so no keepalive tick is needed. | The one port to the host |
-| `chromectl host` | Chrome, when the worker connects | Chrome closes the pipe. Exits and removes its socket, unless the next host has already bound the path: a reload starts the next host first. | The socket listener, the pending map |
+| `chromectl host` | Chrome, when the worker connects | Chrome closes the pipe. Exits and leaves its socket file: a reload starts the next host first, and the path may already be that host's. | The socket listener, the pending map |
 | `chromectl <cmd>` | The user or a caller | One reply | Nothing |
 
 The host is a child of Chrome in the same sense as a renderer: the user never

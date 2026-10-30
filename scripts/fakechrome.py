@@ -26,4 +26,6 @@ for args in (["list"], ["list", "--json"], ["open", "https://example.com", "1"],
     print("$ chromectl", *args, "->", r.returncode, repr(r.stdout), repr(r.stderr), flush=True)
 t.join()
 p.stdin.close(); p.wait(timeout=2)
-print("host exit:", p.returncode, "socket gone:", not os.path.exists(sock))
+print("host exit:", p.returncode, flush=True)
+r = subprocess.run(["./bin/chromectl", "list"], env=env, capture_output=True, text=True)
+print("$ chromectl list, host gone ->", r.returncode, repr(r.stderr))
