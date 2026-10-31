@@ -149,8 +149,9 @@ func TestCallWithoutAHostSaysSo(t *testing.T) {
 }
 
 func TestCallGivesUpOnAHostThatDoesNotAnswer(t *testing.T) {
+	saved := Timeout
 	Timeout = 50 * time.Millisecond
-	t.Cleanup(func() { Timeout = 5 * time.Second })
+	t.Cleanup(func() { Timeout = saved })
 	path := filepath.Join(socketDir(t), "s.sock")
 	ln, err := net.Listen("unix", path)
 	if err != nil {
@@ -183,6 +184,30 @@ func TestCallReadsAClosedConnectionAsNoReply(t *testing.T) {
 		conn, err := ln.Accept()
 		if err == nil {
 			_, _ = bufio.NewReader(conn).ReadString('\n')
+			_ = conn.Close()
+		}
+	}()
+
+	err = Call(path, proto.Request{Cmd: "list"}, nil)
+	var noReply *NoReplyError
+	if !errors.As(err, &noReply) || !errors.Is(err, io.EOF) {
+		t.Fatalf("err = %v, want a NoReplyError for a closed connection", err)
+	}
+}
+
+// A host that dies part way through its reply gave no reply.
+func TestCallReadsACutReplyAsNoReply(t *testing.T) {
+	path := filepath.Join(socketDir(t), "s.sock")
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	go func() {
+		conn, err := ln.Accept()
+		if err == nil {
+			_, _ = bufio.NewReader(conn).ReadString('\n')
+			_, _ = conn.Write([]byte(`{"seq":1,"result":[{"id":`))
 			_ = conn.Close()
 		}
 	}()

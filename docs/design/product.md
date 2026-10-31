@@ -72,7 +72,7 @@ The rules this settles:
 | The group was closed and saved | Not found; a new group is created | Chrome's API returns only open groups and has no call to reopen a saved one. Chrome may then hold two saved groups with that title. |
 | Two calls race to create the group | The second finds the first's group, where both go to one profile ([how](architecture.md#concurrency-in-the-extension)) | Two presses of a key would otherwise create two groups. |
 | The last focused window is an `--app` window | The new group goes into a normal window, named explicitly | `--app` and popup windows cannot hold groups, and Chrome's "current window" can be one. |
-| A profile does not answer | The group is raised where found; where it is found nowhere, none is created | The silent profile may hold it, and creating a second would be the duplicate the title is meant to prevent. |
+| A profile gives no reply | The group is raised where found; where it is found nowhere, none is created | The silent profile may hold it, and creating a second would be the duplicate the title is meant to prevent. A profile that answers with an error, as an extension that predates groups does, holds no group `activate-group` could raise, so it blocks nothing. |
 
 Creating a titled group is three Chrome calls: create the tab, group it, set
 the title. If the last fails, the untitled group stays and Chrome's error is
@@ -140,10 +140,10 @@ tab may still open or close, so the message says the outcome is unknown.
 | Code | Meaning | What the caller can do |
 |---|---|---|
 | 0 | Done | |
-| 1 | A reply with an error: Chrome's text verbatim, the extension's own, or a host's that cannot serve. Also any failure of chromectl's own that is not usage, such as `install` | Show the text |
-| 2 | Bad usage: an unknown command or flag, a missing or extra argument, an id not of the form `list` prints, an empty title, a duration of zero or less, or no window id where several profiles run | Fix the call |
+| 1 | A reply with an error: Chrome's text verbatim, the extension's own, or a host's that cannot serve or never sent the request on. Also any failure of chromectl's own that is not usage, such as `install` | Show the text |
+| 2 | Bad usage: an unknown command or flag, a missing or extra argument, an id not of the form `list` prints, an empty title or url, a duration of zero or less, or no window id where several profiles run | Fix the call |
 | 4 | No reply: the deadline passed, or the host closed the connection without one, as when Chrome goes away mid-call. The command may or may not have taken effect. | Retry a read; check before repeating a write |
-| 5 | No host is listening, or none for the profile the id names. Nothing reached Chrome. | Fall back, or start Chrome |
+| 5 | No host is listening, none for the profile the id names, or no runtime directory a host could listen in. Nothing reached Chrome. | Fall back, or start Chrome |
 
 Where `list`, `groups` or `activate-group` print what answered while a host did
 not, they exit with the code of the first host that failed.

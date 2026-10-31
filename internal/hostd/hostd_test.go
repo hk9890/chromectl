@@ -432,6 +432,19 @@ func TestAPendingCallGetsNoReplyWhenChromeGoesAway(t *testing.T) {
 	}
 }
 
+// A request over Chrome's limit never reaches Chrome, so the caller is told
+// why, not that the outcome is unknown.
+func TestARequestTooLargeForChromeGetsAReply(t *testing.T) {
+	socket, done := fakeExtension(t, func(proto.Request) proto.Reply { return proto.Reply{} })
+	defer done()
+
+	err := client.Call(socket, proto.Request{Cmd: "open", URL: "data:text/html," + strings.Repeat("x", 2<<20)}, nil)
+	var noReply *client.NoReplyError
+	if err == nil || errors.As(err, &noReply) || !strings.Contains(err.Error(), "exceeds Chrome's limit") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestConcurrentCallsAreCorrelatedBySeq(t *testing.T) {
 	socket, done := fakeExtension(t, func(req proto.Request) proto.Reply {
 		res, _ := json.Marshal(proto.Tab{ID: req.Tab})

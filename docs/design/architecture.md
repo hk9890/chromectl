@@ -84,13 +84,14 @@ of its own, `identify`, answered with `{profile}`.
 
 **CLI to host** is one JSON line each way over a Unix socket, then close. A
 request-reply socket rather than a stream, because a CLI call is one question.
-The host assigns `seq`; the CLI never sees it. Where the host has no answer
-from Chrome to give, because Chrome went away or the write to it failed, it
-logs the reason and closes the connection without a reply. The CLI reads a
-connection closed without a reply as it reads a deadline that passed: the
-outcome is unknown. Every reply that does arrive is Chrome's, the extension's,
-or a stale host's, and that is what lets the CLI pass its error text on
-unchanged.
+The host assigns `seq`; the CLI never sees it. Where a request may have
+reached Chrome and the host has no answer to give, because Chrome went away or
+the write to it failed, the host logs the reason and closes the connection
+without a reply. The CLI reads a connection closed without a reply as it reads
+a deadline that passed: the outcome is unknown. Where the request provably
+never reached Chrome, too large for its limit or sent after Chrome went away,
+the host replies with the reason instead. Every reply is passed on with its
+error text unchanged.
 
 ## The deadline
 
@@ -105,8 +106,9 @@ dropped.
 
 The CLI tells the two ways a call ends without a reply by one error type,
 `client.NoReplyError`, which unwraps to `os.ErrDeadlineExceeded` or `io.EOF`.
-A fan-out leaves out a host that closed the connection, as it leaves out a
-dead one: that host's Chrome is shutting down.
+A fan-out leaves out only a dead host, whose socket refuses. A host that
+closed the connection is a failure the fan-out reports: the CLI cannot tell a
+Chrome that shuts down from a host that crashed mid-call.
 
 ## Concurrency in the extension
 

@@ -25,16 +25,32 @@ func Read(r io.Reader, v any) error {
 }
 
 func Write(w io.Writer, v any) error {
-	buf, err := json.Marshal(v)
+	buf, err := Encode(v)
 	if err != nil {
 		return err
 	}
-	if len(buf) > MaxToChrome {
-		return fmt.Errorf("message of %d bytes exceeds Chrome's limit", len(buf))
+	return writeFrame(w, buf)
+}
+
+// Encode marshals v and checks it against Chrome's limit. A caller that must
+// know whether a refused message reached Chrome checks with Encode before it
+// calls Write.
+func Encode(v any) ([]byte, error) {
+	buf, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
 	}
+	if len(buf) > MaxToChrome {
+		return nil, fmt.Errorf("message of %d bytes exceeds Chrome's limit", len(buf))
+	}
+	return buf, nil
+}
+
+// writeFrame writes buf, as Encode made it, with its length.
+func writeFrame(w io.Writer, buf []byte) error {
 	if err := binary.Write(w, binary.NativeEndian, uint32(len(buf))); err != nil {
 		return err
 	}
-	_, err = w.Write(buf)
+	_, err := w.Write(buf)
 	return err
 }

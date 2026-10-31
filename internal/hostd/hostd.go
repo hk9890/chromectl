@@ -294,8 +294,9 @@ func (h *host) ask(conn net.Conn, req proto.Request) (a answer, inFlight bool) {
 	h.seq++
 	req.Seq = h.seq
 	if gone := h.gone; gone != nil {
+		// Nothing is sent, so the call can be told so.
 		h.mu.Unlock()
-		return answer{gone: gone}, false
+		return answer{reply: proto.Reply{Seq: req.Seq, Error: "chrome went away: " + gone.Error()}}, false
 	}
 	h.pending[req.Seq] = ch
 	inFlight = conn != nil
@@ -305,6 +306,12 @@ func (h *host) ask(conn net.Conn, req proto.Request) (a answer, inFlight bool) {
 	}
 	h.mu.Unlock()
 
+	if _, err := native.Encode(req); err != nil {
+		h.mu.Lock()
+		delete(h.pending, req.Seq)
+		h.mu.Unlock()
+		return answer{reply: proto.Reply{Seq: req.Seq, Error: err.Error()}}, inFlight
+	}
 	h.writeMu.Lock()
 	err := native.Write(h.toChrome, req)
 	h.writeMu.Unlock()

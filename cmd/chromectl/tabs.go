@@ -61,15 +61,18 @@ func badUsage(format string, args ...any) error {
 	return usageError{fmt.Sprintf(format, args...)}
 }
 
-// noHostForError is a profile no host serves. It is client.ErrNoHost for one
-// profile: nothing reached Chrome.
-type noHostForError struct{ profile string }
+// noHostError is client.ErrNoHost with its own reason: a profile no host
+// serves, or a socket directory no host could listen in. Nothing reached
+// Chrome.
+type noHostError struct{ msg string }
 
-func (e noHostForError) Error() string {
-	return fmt.Sprintf("no chromectl host for profile %s: is that profile still open?", e.profile)
+func (e noHostError) Error() string { return e.msg }
+
+func (e noHostError) Is(target error) bool { return target == client.ErrNoHost }
+
+func noHostFor(profile string) error {
+	return noHostError{fmt.Sprintf("no chromectl host for profile %s: is that profile still open?", profile)}
 }
-
-func (e noHostForError) Is(target error) bool { return target == client.ErrNoHost }
 
 // incompleteError is a fan-out that printed what answered while a host did
 // not. It exits as its first failure does.
@@ -79,7 +82,7 @@ type incompleteError struct {
 }
 
 func (e incompleteError) Error() string {
-	return "the " + e.what + " is incomplete: a host above did not answer"
+	return "the " + e.what + " is incomplete: a host above failed"
 }
 
 func (e incompleteError) Unwrap() error { return e.first }
@@ -119,7 +122,7 @@ func composite(profile string, id int) string { return fmt.Sprintf("%s:%d", prof
 func hosts() ([]client.Host, error) {
 	dir, err := client.SocketDir()
 	if err != nil {
-		return nil, err
+		return nil, noHostError{err.Error()}
 	}
 	return client.Hosts(dir)
 }
@@ -141,7 +144,7 @@ func hostFor(hs []client.Host, profile string) (client.Host, error) {
 	if err := staleReason(hs); err != nil {
 		return client.Host{}, err
 	}
-	return client.Host{}, noHostForError{profile}
+	return client.Host{}, noHostFor(profile)
 }
 
 // staleReason returns the answer of a stale host, which cannot serve and
@@ -167,7 +170,7 @@ func callProfile(hs []client.Host, profile string, req proto.Request, out any) e
 	if err := client.Call(h.Path, req, out); !errors.Is(err, client.ErrNoHost) {
 		return err
 	}
-	return noHostForError{profile}
+	return noHostFor(profile)
 }
 
 func tabCommand(cmd string, args []string) error {
@@ -195,10 +198,9 @@ type hostAnswer[T any] struct {
 	result T
 }
 
-// askAll sends req to every host at once. A host that is dead, or closes
-// the connection because its Chrome is shutting down, is left out; every
-// other failure is written to stderr, and the first is returned.
-func askAll[T any](hs []client.Host, req proto.Request) (answers []hostAnswer[T], failed error) {
+// askAll sends req to every host at once. A dead host is left out; every
+// other failure is written to stderr and returned, in the order of hs.
+func askAll[T any](hs []client.Host, req proto.Request) (answers []hostAnswer[T], failures []error) {
 	results := make([]T, len(hs))
 	errs := make([]error, len(hs))
 	var wg sync.WaitGroup
@@ -218,15 +220,13 @@ func askAll[T any](hs []client.Host, req proto.Request) (answers []hostAnswer[T]
 		switch err := errs[i]; {
 		case err == nil:
 			answers = append(answers, hostAnswer[T]{h, results[i]})
-		case errors.Is(err, client.ErrNoHost), errors.Is(err, io.EOF):
+		case errors.Is(err, client.ErrNoHost):
 		default:
-			if failed == nil {
-				failed = err
-			}
+			failures = append(failures, err)
 			fmt.Fprintf(os.Stderr, "chromectl: %s %s: %v\n", h.Browser, profileLabel(h), err)
 		}
 	}
-	return answers, failed
+	return answers, failures
 }
 
 func profileLabel(h client.Host) string {
@@ -248,8 +248,8 @@ func list(w io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	answers, failed := askAll[[]proto.Tab](hs, proto.Request{Cmd: "list"})
-	if len(answers) == 0 && failed == nil {
+	answers, failures := askAll[[]proto.Tab](hs, proto.Request{Cmd: "list"})
+	if len(answers) == 0 && len(failures) == 0 {
 		return client.ErrNoHost
 	}
 
@@ -297,8 +297,8 @@ func list(w io.Writer, args []string) error {
 			}
 		}
 	}
-	if err == nil && failed != nil {
-		err = incompleteError{"list", failed}
+	if err == nil && len(failures) > 0 {
+		err = incompleteError{"list", failures[0]}
 	}
 	return err
 }
@@ -315,8 +315,8 @@ func groups(w io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	answers, failed := askAll[[]proto.Group](hs, proto.Request{Cmd: "groups"})
-	if len(answers) == 0 && failed == nil {
+	answers, failures := askAll[[]proto.Group](hs, proto.Request{Cmd: "groups"})
+	if len(answers) == 0 && len(failures) == 0 {
 		return client.ErrNoHost
 	}
 
@@ -340,8 +340,8 @@ func groups(w io.Writer, args []string) error {
 			}
 		}
 	}
-	if err == nil && failed != nil {
-		err = incompleteError{"groups list", failed}
+	if err == nil && len(failures) > 0 {
+		err = incompleteError{"groups list", failures[0]}
 	}
 	return err
 }
@@ -358,8 +358,8 @@ func activateGroup(w io.Writer, args []string) error {
 		return badUsage("activate-group takes a title, a url and an optional window id")
 	}
 	req := proto.Request{Cmd: "activate-group", Title: f.Arg(0), URL: f.Arg(1)}
-	if req.Title == "" {
-		return badUsage("activate-group needs a title that is not empty")
+	if req.Title == "" || req.URL == "" {
+		return badUsage("activate-group needs a title and a url that are not empty")
 	}
 	var windowProfile string
 	if f.NArg() == 3 {
@@ -374,7 +374,7 @@ func activateGroup(w io.Writer, args []string) error {
 		return err
 	}
 
-	answers, failed := askAll[[]proto.Group](hs, proto.Request{Cmd: "groups"})
+	answers, failures := askAll[[]proto.Group](hs, proto.Request{Cmd: "groups"})
 	profile, latest := "", -1.0
 	for _, a := range answers {
 		for _, g := range a.result {
@@ -388,9 +388,10 @@ func activateGroup(w io.Writer, args []string) error {
 		// The group is found; the window is only where a new one would go.
 		req.Window = 0
 	case profile != "":
-	case failed != nil:
-		// The host that did not answer may hold the group, so none is created.
-		return incompleteError{"group search", failed}
+	case silent(failures) != nil:
+		// The host that gave no reply may hold the group, so none is
+		// created. A host that answered with an error holds none it can raise.
+		return incompleteError{"group search", silent(failures)}
 	case windowProfile != "":
 		profile = windowProfile
 	default:
@@ -414,6 +415,17 @@ func activateGroup(w io.Writer, args []string) error {
 	}
 	_, err = fmt.Fprintf(w, "%s\t%s\t%t\t%s\n", id, window, raised.Created, raised.Title)
 	return err
+}
+
+// silent returns the first failure that is no reply at all, or nil.
+func silent(failures []error) error {
+	for _, err := range failures {
+		var noReply *client.NoReplyError
+		if errors.As(err, &noReply) {
+			return err
+		}
+	}
+	return nil
 }
 
 func open(w io.Writer, args []string) error {
@@ -482,11 +494,14 @@ func onlyProfile(hs []client.Host, cmd string) (string, error) {
 		}
 		return "", client.ErrNoHost
 	}
-	answers, failed := askAll[[]proto.Tab](live, proto.Request{Cmd: "list"})
-	if len(answers) == 1 && failed == nil {
+	answers, failures := askAll[[]proto.Tab](live, proto.Request{Cmd: "list"})
+	if len(answers) == 1 && len(failures) == 0 {
 		return answers[0].host.Profile, nil
 	}
-	if len(answers) == 0 && failed == nil {
+	if len(answers) == 0 && len(failures) > 0 {
+		return "", failures[0]
+	}
+	if len(answers) == 0 {
 		return "", client.ErrNoHost
 	}
 	var windows, windowless []string

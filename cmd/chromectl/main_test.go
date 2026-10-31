@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -218,10 +219,106 @@ func TestActivateGroupWithSeveralProfilesCreatesInTheWindowsProfile(t *testing.T
 	}
 }
 
-func TestActivateGroupNeedsATitle(t *testing.T) {
+func TestActivateGroupNeedsATitleAndAURL(t *testing.T) {
 	runtimeDir(t)
 	if err := activateGroup(io.Discard, []string{"", "https://example.com"}); exitCode(err) != 2 {
-		t.Fatalf("err = %v", err)
+		t.Fatalf("empty title: err = %v", err)
+	}
+	if err := activateGroup(io.Discard, []string{"proj", ""}); exitCode(err) != 2 {
+		t.Fatalf("empty url: err = %v", err)
+	}
+}
+
+// fakeSocket serves a host socket for profile in sockets whose every
+// connection gets reply, or is closed without one where reply is nil.
+func fakeSocket(t *testing.T, sockets, profile string, browserPID int, reply *proto.Reply) {
+	t.Helper()
+	if err := os.MkdirAll(sockets, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", filepath.Join(sockets, client.SocketName(profile, "brave", browserPID, starts.Add(1))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			var req proto.Request
+			_ = json.NewDecoder(conn).Decode(&req)
+			if reply != nil {
+				_ = json.NewEncoder(conn).Encode(reply)
+			}
+			_ = conn.Close()
+		}
+	}()
+}
+
+// A profile that answers groups with an error holds no group activate-group
+// could raise, so the group is created elsewhere; one that gives no reply may
+// hold it, so none is.
+func TestActivateGroupCreatesUnlessAProfileGaveNoReply(t *testing.T) {
+	sockets := runtimeDir(t)
+	got := make(chan proto.Request, 1)
+	startHost(t, "aaaa0001", "chrome", 1, []proto.Tab{{ID: 4, Window: 1}}, got)
+	fakeSocket(t, sockets, "bbbb0002", 2, &proto.Reply{Error: "unknown command groups"})
+
+	if err := activateGroup(io.Discard, []string{"proj", "https://example.com/proj", "aaaa0001:1"}); err != nil {
+		t.Fatal(err)
+	}
+	if req := <-got; req.Cmd != "activate-group" || req.Window != 1 {
+		t.Fatalf("the extension got %+v", req)
+	}
+
+	fakeSocket(t, sockets, "cccc0003", 3, nil)
+	err := activateGroup(io.Discard, []string{"proj", "https://example.com/proj", "aaaa0001:1"})
+	if err == nil || err.Error() != "the group search is incomplete: a host above failed" || exitCode(err) != 4 {
+		t.Fatalf("err = %v, code %d", err, exitCode(err))
+	}
+	if len(got) != 0 {
+		t.Fatalf("the extension got %+v", <-got)
+	}
+}
+
+// A host that closes the connection without a reply failed: list says so
+// and exits 4, rather than leaving the profile out.
+func TestListReportsAHostThatGaveNoReply(t *testing.T) {
+	sockets := runtimeDir(t)
+	startHost(t, "aaaa0001", "chrome", 1, []proto.Tab{{ID: 4, Window: 1}}, nil)
+	fakeSocket(t, sockets, "bbbb0002", 2, nil)
+
+	var out bytes.Buffer
+	err := list(&out, nil)
+	if err == nil || exitCode(err) != 4 {
+		t.Fatalf("err = %v, code %d", err, exitCode(err))
+	}
+	if !strings.HasPrefix(out.String(), "aaaa0001:4\t") {
+		t.Fatalf("list = %q", out.String())
+	}
+}
+
+// Where no profile answers, open reports why, not that it needs a window.
+func TestOpenWhereNoProfileAnswersSaysWhy(t *testing.T) {
+	sockets := runtimeDir(t)
+	fakeSocket(t, sockets, "aaaa0001", 1, nil)
+	fakeSocket(t, sockets, "bbbb0002", 2, nil)
+
+	if err := open(io.Discard, []string{"https://example.com"}); exitCode(err) != 4 {
+		t.Fatalf("err = %v, code %d", err, exitCode(err))
+	}
+}
+
+// Without a runtime directory no host can listen: that is no host, exit 5.
+func TestNoSocketDirIsNoHost(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	if _, err := os.Stat(fmt.Sprintf("/run/user/%d", os.Getuid())); err == nil {
+		t.Skip("this machine has /run/user/<uid>")
+	}
+	if err := list(io.Discard, nil); exitCode(err) != 5 {
+		t.Fatalf("err = %v, code %d", err, exitCode(err))
 	}
 }
 

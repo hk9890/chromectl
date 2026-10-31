@@ -187,18 +187,20 @@ func Call(socketPath string, req proto.Request, out any) error {
 	}
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(deadline)
+	step := "send request"
 	err = json.NewEncoder(conn).Encode(req)
 	var reply proto.Reply
 	if err == nil {
+		step = "read reply"
 		err = json.NewDecoder(conn).Decode(&reply)
 	}
 	switch {
 	case errors.Is(err, os.ErrDeadlineExceeded):
 		return &NoReplyError{fmt.Sprintf("no reply in %s; Chrome may still carry the command out", Timeout), os.ErrDeadlineExceeded}
-	case errors.Is(err, io.EOF), errors.Is(err, syscall.EPIPE), errors.Is(err, syscall.ECONNRESET):
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, syscall.EPIPE), errors.Is(err, syscall.ECONNRESET):
 		return &NoReplyError{"no reply: the chromectl host closed the connection, as when Chrome goes away; Chrome may or may not have carried the command out", io.EOF}
 	case err != nil:
-		return fmt.Errorf("read reply: %w", err)
+		return fmt.Errorf("%s: %w", step, err)
 	}
 	if reply.Error != "" {
 		return errors.New(reply.Error)

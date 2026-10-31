@@ -46,6 +46,15 @@ function tabGroups() {
   return chrome.tabGroups;
 }
 
+// groupedTabs reads every group and every tab at once, and files each tab
+// under its group's id.
+async function groupedTabs() {
+  const [groups, tabs] = await Promise.all([tabGroups().query({}), chrome.tabs.query({})]);
+  const members = new Map(groups.map((g) => [g.id, []]));
+  for (const t of tabs) members.get(t.groupId)?.push(t);
+  return { groups, members };
+}
+
 const lastAccessed = (tabs) => Math.max(0, ...tabs.map((t) => t.lastAccessed ?? 0));
 
 function mostRecent(tabs) {
@@ -53,9 +62,14 @@ function mostRecent(tabs) {
 }
 
 // pageOf picks the tab of a group to activate: the one at url, else one under
-// url, else any. The boundary keeps github.com/o/repo from taking
-// github.com/o/repo-tools for its own page.
-function pageOf(tabs, url) {
+// url, else any. url is read the way Chrome stores a tab's, so
+// https://Example.com is at https://example.com/. The boundary keeps
+// github.com/o/repo from taking github.com/o/repo-tools for its own page.
+function pageOf(tabs, given) {
+  let url = given;
+  try {
+    url = new URL(given).href;
+  } catch {}
   const at = tabs.filter((t) => t.url === url);
   const boundary = (rest) => rest !== "" && (url.endsWith("/") || "/?#".includes(rest[0]));
   const under = tabs.filter((t) => t.url?.startsWith(url) && boundary(t.url.slice(url.length)));
@@ -66,12 +80,10 @@ function pageOf(tabs, url) {
 // accessed tab where several share the title, or creates it with url in
 // window, else in the last focused normal window, else in a new one.
 async function raiseGroup({ title, url, window: windowId }) {
-  const groups = await tabGroups().query({});
-  const tabs = await chrome.tabs.query({});
-  const members = (g) => tabs.filter((t) => t.groupId === g.id);
+  const { groups, members } = await groupedTabs();
   const found = groups
     .filter((g) => g.title === title)
-    .map((g) => ({ group: g, tabs: members(g) }))
+    .map((g) => ({ group: g, tabs: members.get(g.id) }))
     .filter((g) => g.tabs.length > 0);
   if (found.length > 0) {
     const { group, tabs: inGroup } = found.reduce((a, b) => (lastAccessed(b.tabs) > lastAccessed(a.tabs) ? b : a));
@@ -135,13 +147,12 @@ const commands = {
   },
 
   async groups() {
-    const groups = await tabGroups().query({});
-    const tabs = await chrome.tabs.query({});
+    const { groups, members } = await groupedTabs();
     return groups.map((g) => ({
       id: g.id,
       window: g.windowId,
       title: g.title ?? "",
-      lastAccessed: lastAccessed(tabs.filter((t) => t.groupId === g.id)),
+      lastAccessed: lastAccessed(members.get(g.id)),
     }));
   },
 
