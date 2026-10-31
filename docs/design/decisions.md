@@ -114,15 +114,14 @@ These were replaced when chromectl learned tab groups.
 **The `tabs` permission alone.** The extension asked for `tabs` and
 `nativeMessaging` only, and a command that needed more was a different
 product. A group's title and its collapsed state need `tabGroups`, and finding
-a group by its title is the job a project key has. `tabGroups` reads and
-changes the tab strip and nothing in a page, so the trust level stays the one
-`tabs` set.
+a group by its title is the job a project key has. Why the trust level stays
+the one `tabs` set is in [product.md](product.md#scope).
 
 **No URL judgement in chromectl.** The caller matched every URL, and chromectl
 never chose a tab by one. `activate-group` now ranks the tabs of the group its
-title found by the URL it was given: the tab at it, else one under it. The URL
-ranks tabs already found and never decides that a page is open, so the caller
-still owns matching.
+title found by the URL it was given, so the one exception is inside a group
+already found. The ranking and why the caller still owns matching are in
+[product.md](product.md#groups) and [product.md](product.md#model).
 
 **A fixed 10-second limit per call.** Long enough for a Chrome that restores a
 session, too long for a keypress, and no caller could change it, so callers
