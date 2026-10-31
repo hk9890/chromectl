@@ -111,6 +111,19 @@ one hung host would hold every call; a call now has a deadline.
 
 These were replaced when chromectl learned tab groups.
 
+**The `tabs` permission alone.** The extension asked for `tabs` and
+`nativeMessaging` only, and a command that needed more was a different
+product. A group's title and its collapsed state need `tabGroups`, and finding
+a group by its title is the job a project key has. `tabGroups` reads and
+changes the tab strip and nothing in a page, so the trust level stays the one
+`tabs` set.
+
+**No URL judgement in chromectl.** The caller matched every URL, and chromectl
+never chose a tab by one. `activate-group` now ranks the tabs of the group its
+title found by the URL it was given: the tab at it, else one under it. The URL
+ranks tabs already found and never decides that a page is open, so the caller
+still owns matching.
+
 **A fixed 10-second limit per call.** Long enough for a Chrome that restores a
 session, too long for a keypress, and no caller could change it, so callers
 wrapped chromectl in `timeout`. The deadline is now 5 seconds, and `--timeout`

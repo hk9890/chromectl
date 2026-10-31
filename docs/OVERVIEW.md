@@ -36,7 +36,7 @@ same JSON names.
 ## Finding things
 
 ```bash
-rg -n 'async \w+\(' extension/background.js    # every command the extension implements
+rg -n 'async "?[\w-]+"?\(' extension/background.js    # every command the extension implements
 rg -n 'case "' cmd/chromectl/main.go             # every CLI subcommand
 rg -n 'json:"' internal/proto/proto.go           # every field on the wire
 ```
