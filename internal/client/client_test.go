@@ -1,7 +1,10 @@
 package client
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -146,8 +149,8 @@ func TestCallWithoutAHostSaysSo(t *testing.T) {
 }
 
 func TestCallGivesUpOnAHostThatDoesNotAnswer(t *testing.T) {
-	callTimeout = 50 * time.Millisecond
-	t.Cleanup(func() { callTimeout = 10 * time.Second })
+	Timeout = 50 * time.Millisecond
+	t.Cleanup(func() { Timeout = 5 * time.Second })
 	path := filepath.Join(socketDir(t), "s.sock")
 	ln, err := net.Listen("unix", path)
 	if err != nil {
@@ -163,8 +166,31 @@ func TestCallGivesUpOnAHostThatDoesNotAnswer(t *testing.T) {
 	}()
 
 	err = Call(path, proto.Request{Cmd: "list"}, nil)
-	if err == nil || !strings.HasPrefix(err.Error(), "no reply in 50ms") {
+	if err == nil || !strings.HasPrefix(err.Error(), "no reply in 50ms") || !errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// A host closes the connection without a reply when Chrome goes away.
+func TestCallReadsAClosedConnectionAsNoReply(t *testing.T) {
+	path := filepath.Join(socketDir(t), "s.sock")
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	go func() {
+		conn, err := ln.Accept()
+		if err == nil {
+			_, _ = bufio.NewReader(conn).ReadString('\n')
+			_ = conn.Close()
+		}
+	}()
+
+	err = Call(path, proto.Request{Cmd: "list"}, nil)
+	var noReply *NoReplyError
+	if !errors.As(err, &noReply) || !errors.Is(err, io.EOF) {
+		t.Fatalf("err = %v, want a NoReplyError for a closed connection", err)
 	}
 }
 

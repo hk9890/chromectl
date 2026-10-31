@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "chromectl",
   "version": "0.1.0",
-  "description": "Lets the chromectl command line tool list, activate, open and close tabs.",
+  "description": "Lets the chromectl command line tool list, activate, open and close tabs, and find or create tab groups.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs1clYMI31vUxcjv8yEtSdRenAFtZLFc016/46msEt9rFQJgFtDkRm2AHg50rCcgsdfiLnMlwylPMASZiYLCrLu6c3iue5+HQxRFlBdViB0+OKWbBA8p2nmNSJnW7Z8pQDvb17GCOSpZoz6vtuDL6/XtNDUD+DpoNGax+bhurBvs/u7aT6NxjXE/GjvYzkpWKl1cQwxjrZIVbF/mHoCLWWA+jYRLH0MmsLQIlRglmB3OANEVnfGp+DKbloPUWugbT6IksYH2VPUASOhpUiC9zhZ4yxNVJCpSQ6gzbOl+Ib1wHHu/OB5rMg3wYSr0z7DrnThEfoL3tSTpDXlINrbSafQIDAQAB",
   "background": { "service_worker": "background.js" },
-  "permissions": ["tabs", "nativeMessaging"]
+  "permissions": ["tabs", "tabGroups", "nativeMessaging"]
 }

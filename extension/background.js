@@ -37,6 +37,67 @@ function profileId() {
   });
 }
 
+// tabGroups is chrome.tabGroups, which exists only once a reload has granted
+// the permission a newer manifest asks for.
+function tabGroups() {
+  if (!chrome.tabGroups) {
+    throw new Error("the chromectl extension lacks the tabGroups permission: reload it at chrome://extensions");
+  }
+  return chrome.tabGroups;
+}
+
+const lastAccessed = (tabs) => Math.max(0, ...tabs.map((t) => t.lastAccessed ?? 0));
+
+function mostRecent(tabs) {
+  return tabs.reduce((a, b) => ((b.lastAccessed ?? 0) > (a.lastAccessed ?? 0) ? b : a));
+}
+
+// pageOf picks the tab of a group to activate: the one at url, else one under
+// url, else any. The boundary keeps github.com/o/repo from taking
+// github.com/o/repo-tools for its own page.
+function pageOf(tabs, url) {
+  const at = tabs.filter((t) => t.url === url);
+  const boundary = (rest) => rest !== "" && (url.endsWith("/") || "/?#".includes(rest[0]));
+  const under = tabs.filter((t) => t.url?.startsWith(url) && boundary(t.url.slice(url.length)));
+  return mostRecent(at.length ? at : under.length ? under : tabs);
+}
+
+// raiseGroup raises the group titled title, the one with the most recently
+// accessed tab where several share the title, or creates it with url in
+// window, else in the last focused normal window, else in a new one.
+async function raiseGroup({ title, url, window: windowId }) {
+  const groups = await tabGroups().query({});
+  const tabs = await chrome.tabs.query({});
+  const members = (g) => tabs.filter((t) => t.groupId === g.id);
+  const found = groups
+    .filter((g) => g.title === title)
+    .map((g) => ({ group: g, tabs: members(g) }))
+    .filter((g) => g.tabs.length > 0);
+  if (found.length > 0) {
+    const { group, tabs: inGroup } = found.reduce((a, b) => (lastAccessed(b.tabs) > lastAccessed(a.tabs) ? b : a));
+    const tab = pageOf(inGroup, url);
+    await tabGroups().update(group.id, { collapsed: false });
+    await chrome.tabs.update(tab.id, { active: true });
+    await chrome.windows.update(tab.windowId, { focused: true });
+    return { id: tab.id, window: tab.windowId, created: false, title: tab.title ?? "" };
+  }
+
+  if (!windowId) {
+    windowId = await chrome.windows.getLastFocused({ windowTypes: ["normal"] }).then((w) => w.id, () => undefined);
+  }
+  const tab = windowId
+    ? await chrome.tabs.create({ url, windowId, active: true })
+    : (await chrome.windows.create({ url, type: "normal", focused: true })).tabs[0];
+  const group = await chrome.tabs.group({ tabIds: [tab.id], createProperties: { windowId: tab.windowId } });
+  await tabGroups().update(group, { title });
+  await chrome.windows.update(tab.windowId, { focused: true });
+  return { id: tab.id, window: tab.windowId, created: true, title: tab.title ?? "" };
+}
+
+// Two activate-group calls for one title that overlapped would each find no
+// group and each create one, so they run one after the other.
+let raising = Promise.resolve();
+
 const commands = {
   async identify() {
     return { profile: await profileId() };
@@ -47,6 +108,7 @@ const commands = {
     return tabs.map((t) => ({
       id: t.id,
       window: t.windowId,
+      group: t.groupId,
       active: t.active,
       title: t.title ?? "",
       url: t.url ?? "",
@@ -70,6 +132,23 @@ const commands = {
   async close({ id }) {
     await chrome.tabs.remove(id);
     return {};
+  },
+
+  async groups() {
+    const groups = await tabGroups().query({});
+    const tabs = await chrome.tabs.query({});
+    return groups.map((g) => ({
+      id: g.id,
+      window: g.windowId,
+      title: g.title ?? "",
+      lastAccessed: lastAccessed(tabs.filter((t) => t.groupId === g.id)),
+    }));
+  },
+
+  "activate-group"(req) {
+    const raised = raising.then(() => raiseGroup(req));
+    raising = raised.catch(() => {});
+    return raised;
   },
 };
 

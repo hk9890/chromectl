@@ -14,6 +14,8 @@ type Request struct {
 	Tab    int    `json:"id"`
 	URL    string `json:"url,omitempty"`
 	Window int    `json:"window,omitempty"`
+	// Title is a tab group's title, compared exactly.
+	Title string `json:"title,omitempty"`
 }
 
 // Reply carries the command's result, or the reason it failed.
@@ -25,11 +27,33 @@ type Reply struct {
 
 // Tab is one entry of a list result.
 type Tab struct {
-	ID     int    `json:"id"`
-	Window int    `json:"window"`
+	ID     int `json:"id"`
+	Window int `json:"window"`
+	// Group is Chrome's group id, -1 for a tab in no group. An extension
+	// older than groups sends none, which decodes as 0, also no group.
+	Group  int    `json:"group"`
 	Active bool   `json:"active"`
 	Title  string `json:"title"`
 	URL    string `json:"url"`
+}
+
+// Group is one entry of a groups result. LastAccessed is the latest of its
+// tabs', in milliseconds since the epoch, so groups of different browsers
+// compare.
+type Group struct {
+	ID           int     `json:"id"`
+	Window       int     `json:"window"`
+	Title        string  `json:"title"`
+	LastAccessed float64 `json:"lastAccessed"`
+}
+
+// Raised is the result of activate-group: the tab it activated, whether it
+// created the group, and the tab's title.
+type Raised struct {
+	ID      int    `json:"id"`
+	Window  int    `json:"window"`
+	Created bool   `json:"created"`
+	Title   string `json:"title"`
 }
 
 // Identity is the result of the identify request the host sends the
@@ -42,10 +66,6 @@ type Identity struct {
 // digits, which the extension makes and the host, the socket name and every
 // tab id carry.
 const ProfileID = `[0-9a-f]{8}`
-
-// ChromeGone begins the error of a call the host could not finish because
-// Chrome closed its pipe, or could no longer be written to.
-const ChromeGone = "chrome went away"
 
 // StaleExtension is the answer of a host whose extension is older than its
 // binary and does not know identify.
