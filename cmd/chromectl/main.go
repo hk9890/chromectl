@@ -104,8 +104,8 @@ func list(args []string) error {
 	return nil
 }
 
-// newFlagSet exits 2 on a bad flag and 0 on -h, as main does for an unknown
-// command and for help, and prints the usage once.
+// newFlagSet exits 2 on a bad flag, as main does for an unknown command, and
+// 0 on -h. Both print the usage once, to stderr.
 func newFlagSet(name string) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ExitOnError)
 	fs.Usage = func() { _, _ = fmt.Fprint(fs.Output(), usage) }
@@ -113,7 +113,7 @@ func newFlagSet(name string) *flag.FlagSet {
 }
 
 // parseID reads a tab or window id. Chrome's ids start at 1, and the wire
-// omits a 0, which Chrome reads as "the current tab".
+// omits a window of 0, which opens the tab in the last focused window.
 func parseID(kind, arg string) (int, error) {
 	id, err := strconv.Atoi(arg)
 	if err != nil || id < 1 {
@@ -284,7 +284,8 @@ func copySelf(dst string) error {
 // writeExtension replaces dir with the embedded extension, so no file a
 // previous version had is left behind. It writes a sibling directory first
 // and renames it into place, because Chrome loads the extension from dir and
-// must not find it half written.
+// must not find it half written. Between the two renames dir is absent for
+// an instant; where the second rename fails, the old copy goes back.
 func writeExtension(dir string) error {
 	ext, err := fs.Sub(chromectl.Extension, "extension")
 	if err != nil {
@@ -306,7 +307,11 @@ func writeExtension(dir string) error {
 		return err
 	}
 	if err := os.Rename(tmp, dir); err != nil {
+		_ = os.Rename(old, dir)
 		return err
 	}
-	return os.RemoveAll(old)
+	// The new copy is in place; a leftover old copy is not worth failing
+	// install before it writes the manifests.
+	_ = os.RemoveAll(old)
+	return nil
 }

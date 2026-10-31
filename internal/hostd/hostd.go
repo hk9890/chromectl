@@ -20,12 +20,16 @@ import (
 	"github.com/hk9890/chromectl/internal/proto"
 )
 
+// lastReplyWindow is how long a caller has to read its reply once Chrome is
+// gone, so a caller that never reads cannot keep the host alive.
+const lastReplyWindow = time.Second
+
 // Run serves socketPath until fromChrome reaches EOF. It replaces whatever
 // socket is at the path on start and leaves its own in place on exit: a
 // reload of the extension starts the next host, which binds the path anew,
 // before Chrome closes this host's pipe, and a dead socket refuses the CLI
-// as an absent one does. Run returns once every connection it accepted has
-// had its reply.
+// as an absent one does. Run returns once every call that reached Chrome has
+// written its reply, so the process does not exit under it.
 func Run(fromChrome io.Reader, toChrome io.Writer, socketPath string) error {
 	_ = os.Remove(socketPath)
 	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: socketPath, Net: "unix"})
@@ -35,7 +39,7 @@ func Run(fromChrome io.Reader, toChrome io.Writer, socketPath string) error {
 	ln.SetUnlinkOnClose(false)
 	defer func() { _ = ln.Close() }()
 
-	h := &host{toChrome: toChrome, pending: map[uint64]chan proto.Reply{}, conns: map[net.Conn]bool{}}
+	h := &host{toChrome: toChrome, pending: map[uint64]chan proto.Reply{}, inFlight: map[net.Conn]struct{}{}}
 
 	readErr := make(chan error, 1)
 	go func() {
@@ -53,11 +57,10 @@ func Run(fromChrome io.Reader, toChrome io.Writer, socketPath string) error {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		h.track(conn)
 		go h.serve(conn)
 	}
-	h.stopReading()
-	h.served.Wait()
+	h.limitLastReplies()
+	h.inFlightDone.Wait()
 	if e := <-readErr; !errors.Is(e, io.EOF) {
 		return e
 	}
@@ -65,14 +68,14 @@ func Run(fromChrome io.Reader, toChrome io.Writer, socketPath string) error {
 }
 
 type host struct {
-	toChrome io.Writer
-	writeMu  sync.Mutex
-	mu       sync.Mutex
-	seq      uint64
-	pending  map[uint64]chan proto.Reply
-	gone     error
-	conns    map[net.Conn]bool
-	served   sync.WaitGroup
+	toChrome     io.Writer
+	writeMu      sync.Mutex
+	mu           sync.Mutex
+	seq          uint64
+	pending      map[uint64]chan proto.Reply
+	gone         error
+	inFlight     map[net.Conn]struct{}
+	inFlightDone sync.WaitGroup
 }
 
 func (h *host) readReplies(r io.Reader) error {
@@ -85,8 +88,15 @@ func (h *host) readReplies(r io.Reader) error {
 				h.failAll(err)
 				return err
 			}
-			reply.Result = nil
-			reply.Error = "bad reply from the extension: " + err.Error()
+			reply = proto.Reply{Seq: reply.Seq, Error: "bad reply from the extension: " + err.Error()}
+			// The host numbers calls from 1, so a 0 is a seq that did not decode
+			// either, and no one call can be told it was the one.
+			if reply.Seq == 0 {
+				h.mu.Lock()
+				h.failPending(reply.Error)
+				h.mu.Unlock()
+				continue
+			}
 		}
 		h.mu.Lock()
 		ch, ok := h.pending[reply.Seq]
@@ -104,60 +114,65 @@ func (h *host) failAll(err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.gone = err
+	h.failPending(goneMsg(err))
+}
+
+// failPending answers every pending call with msg. The caller holds h.mu.
+func (h *host) failPending(msg string) {
 	for seq, ch := range h.pending {
-		ch <- goneReply(seq, err)
+		ch <- proto.Reply{Seq: seq, Error: msg}
 		delete(h.pending, seq)
 	}
 }
 
 func goneReply(seq uint64, err error) proto.Reply {
-	return proto.Reply{Seq: seq, Error: "chrome went away: " + err.Error()}
+	return proto.Reply{Seq: seq, Error: goneMsg(err)}
 }
 
-func (h *host) track(conn net.Conn) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.conns[conn] = true
-	h.served.Add(1)
-}
+func goneMsg(err error) string { return "chrome went away: " + err.Error() }
 
-// stopReading ends the wait of every connection that has not sent its
-// request yet, so a silent client cannot keep the host alive after Chrome
-// is gone. A reply already on its way is still written.
-func (h *host) stopReading() {
+// limitLastReplies gives each call in flight lastReplyWindow to write its
+// reply. Run calls it after Chrome is gone, when no call can start any more.
+func (h *host) limitLastReplies() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for conn := range h.conns {
-		_ = conn.SetReadDeadline(time.Now())
+	for conn := range h.inFlight {
+		_ = conn.SetWriteDeadline(time.Now().Add(lastReplyWindow))
 	}
 }
 
 func (h *host) serve(conn net.Conn) {
-	defer func() {
-		_ = conn.Close()
-		h.mu.Lock()
-		delete(h.conns, conn)
-		h.mu.Unlock()
-		h.served.Done()
-	}()
+	defer func() { _ = conn.Close() }()
 	var req proto.Request
 	if err := json.NewDecoder(bufio.NewReader(conn)).Decode(&req); err != nil {
 		_ = json.NewEncoder(conn).Encode(proto.Reply{Error: "bad request: " + err.Error()})
 		return
 	}
-	_ = json.NewEncoder(conn).Encode(h.ask(req))
+	reply, inFlight := h.ask(conn, req)
+	_ = json.NewEncoder(conn).Encode(reply)
+	if inFlight {
+		h.mu.Lock()
+		delete(h.inFlight, conn)
+		h.mu.Unlock()
+		h.inFlightDone.Done()
+	}
 }
 
-func (h *host) ask(req proto.Request) proto.Reply {
+// ask relays req to Chrome and waits for its reply. It reports whether the
+// call went in flight, which Run waits for; a call made after Chrome is gone
+// does not.
+func (h *host) ask(conn net.Conn, req proto.Request) (reply proto.Reply, inFlight bool) {
 	ch := make(chan proto.Reply, 1)
 	h.mu.Lock()
 	h.seq++
 	req.Seq = h.seq
 	if gone := h.gone; gone != nil {
 		h.mu.Unlock()
-		return goneReply(req.Seq, gone)
+		return goneReply(req.Seq, gone), false
 	}
 	h.pending[req.Seq] = ch
+	h.inFlight[conn] = struct{}{}
+	h.inFlightDone.Add(1)
 	h.mu.Unlock()
 
 	h.writeMu.Lock()
@@ -167,7 +182,7 @@ func (h *host) ask(req proto.Request) proto.Reply {
 		h.mu.Lock()
 		delete(h.pending, req.Seq)
 		h.mu.Unlock()
-		return proto.Reply{Seq: req.Seq, Error: fmt.Sprintf("send to chrome: %v", err)}
+		return proto.Reply{Seq: req.Seq, Error: fmt.Sprintf("send to chrome: %v", err)}, true
 	}
-	return <-ch
+	return <-ch, true
 }

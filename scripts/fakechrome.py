@@ -18,6 +18,7 @@ for _ in range(500):
         break
     except OSError: time.sleep(0.01)
 else: fail("the host never accepted on " + sock)
+served = []
 def extension():
     for _ in range(5):
         req = read()
@@ -28,6 +29,7 @@ def extension():
             write({"seq": req["seq"], "result": {"id": 5, "window": 1}})
         else:
             write({"seq": req["seq"], "error": "No tab with id: 99."})
+        served.append(req)
 t = threading.Thread(target=extension, daemon=True); t.start()
 url = "https://github.com/pulls?q=is%3Aopen&sort=updated"
 listed = json.dumps([{"id": 4, "window": 1, "active": True, "title": "Pull requests", "url": url}], separators=(",", ":"))
@@ -39,17 +41,22 @@ cases = (
     (["open", "--json", "https://example.com"], 0, '{"id":5,"window":1}\n', ""),
     (["activate", "99"], 1, "", "chromectl: No tab with id: 99.\n"),
 )
+def cli(args):
+    try: return subprocess.run(["./bin/chromectl"] + args, env=env, capture_output=True, text=True, timeout=5)
+    except subprocess.TimeoutExpired: fail("chromectl %s did not answer in 5s" % " ".join(args))
 for args, code, out, err in cases:
-    r = subprocess.run(["./bin/chromectl"] + args, env=env, capture_output=True, text=True, timeout=5)
+    r = cli(args)
     print("$ chromectl", *args, "->", r.returncode, repr(r.stdout), repr(r.stderr), flush=True)
     if (r.returncode, r.stdout, r.stderr) != (code, out, err):
         fail("want %d %r %r" % (code, out, err))
 t.join(timeout=5)
-if t.is_alive(): fail("the extension did not get all five requests")
-p.stdin.close(); p.wait(timeout=2)
+if len(served) != 5: fail("the extension answered %d of five requests" % len(served))
+p.stdin.close()
+try: p.wait(timeout=2)
+except subprocess.TimeoutExpired: fail("the host did not exit 2s after its stdin closed")
 print("host exit:", p.returncode, flush=True)
 if p.returncode != 0: fail("the host exited %d" % p.returncode)
-r = subprocess.run(["./bin/chromectl", "list"], env=env, capture_output=True, text=True, timeout=5)
+r = cli(["list"])
 print("$ chromectl list, host gone ->", r.returncode, repr(r.stderr))
 if r.returncode != 1 or "no chromectl host is listening" not in r.stderr: fail("want ErrNoHost")
 print("PASS")
