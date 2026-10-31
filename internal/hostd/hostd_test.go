@@ -3,6 +3,7 @@ package hostd_test
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -281,6 +282,39 @@ func TestOpenSendsUrlAndWindow(t *testing.T) {
 	}
 }
 
+func TestGroupsComesBack(t *testing.T) {
+	socket, sent, done := recordingExtension(t, []proto.Group{{ID: 11, Window: 2, Title: "chromectl", LastAccessed: 1700000000000.5}})
+	defer done()
+
+	var groups []proto.Group
+	if err := client.Call(socket, proto.Request{Cmd: "groups"}, &groups); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-sent; got["cmd"] != "groups" {
+		t.Fatalf("the extension received %v", got)
+	}
+	if len(groups) != 1 || groups[0].Title != "chromectl" || groups[0].LastAccessed != 1700000000000.5 {
+		t.Fatalf("groups = %+v", groups)
+	}
+}
+
+func TestActivateGroupSendsTitleUrlAndWindow(t *testing.T) {
+	socket, sent, done := recordingExtension(t, proto.Raised{ID: 5, Window: 2, Created: true, Title: "github.com/hk9890/chromectl"})
+	defer done()
+
+	var raised proto.Raised
+	req := proto.Request{Cmd: "activate-group", Title: "chromectl", URL: "https://github.com/hk9890/chromectl", Window: 2}
+	if err := client.Call(socket, req, &raised); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-sent; got["cmd"] != "activate-group" || got["title"] != "chromectl" || got["url"] != "https://github.com/hk9890/chromectl" || got["window"] != float64(2) {
+		t.Fatalf("the extension received %v", got)
+	}
+	if !raised.Created || raised.ID != 5 || raised.Title != "github.com/hk9890/chromectl" {
+		t.Fatalf("raised = %+v", raised)
+	}
+}
+
 func TestCloseSendsTheTabId(t *testing.T) {
 	socket, sent, done := recordingExtension(t, map[string]any{})
 	defer done()
@@ -377,9 +411,10 @@ func TestACallerThatDoesNotReadCannotHoldTheHost(t *testing.T) {
 	}
 }
 
-// A call that is pending when Chrome closes the pipe gets its answer before
-// Run returns, and so before the host process exits.
-func TestAPendingCallHearsThatChromeWentAway(t *testing.T) {
+// A call that is pending when Chrome closes the pipe hears so before Run
+// returns, and so before the host process exits: the host closes its
+// connection without a reply, because Chrome may or may not have acted.
+func TestAPendingCallGetsNoReplyWhenChromeGoesAway(t *testing.T) {
 	asked := make(chan struct{})
 	socket, done := rawExtensionIn(t, socketDir(t), 1, identifying(profile, func(json.RawMessage, proto.Request, io.Writer) error {
 		close(asked)
@@ -390,7 +425,22 @@ func TestAPendingCallHearsThatChromeWentAway(t *testing.T) {
 	go func() { errs <- client.Call(socket, proto.Request{Cmd: "list"}, nil) }()
 	<-asked
 	done()
-	if err := <-errs; err == nil || err.Error() != proto.ChromeGone+": EOF" {
+	err := <-errs
+	var noReply *client.NoReplyError
+	if !errors.As(err, &noReply) || !errors.Is(err, io.EOF) {
+		t.Fatalf("err = %v, want a NoReplyError for a closed connection", err)
+	}
+}
+
+// A request over Chrome's limit never reaches Chrome, so the caller is told
+// why, not that the outcome is unknown.
+func TestARequestTooLargeForChromeGetsAReply(t *testing.T) {
+	socket, done := fakeExtension(t, func(proto.Request) proto.Reply { return proto.Reply{} })
+	defer done()
+
+	err := client.Call(socket, proto.Request{Cmd: "open", URL: "data:text/html," + strings.Repeat("x", 2<<20)}, nil)
+	var noReply *client.NoReplyError
+	if err == nil || errors.As(err, &noReply) || !strings.Contains(err.Error(), "exceeds Chrome's limit") {
 		t.Fatalf("err = %v", err)
 	}
 }

@@ -14,13 +14,17 @@ def fail(why):
 served = []
 # The host asks identify first and opens its socket only after the answer.
 def extension():
-    for _ in range(6):
+    for _ in range(9):
         req = read()
         print("host->ext:", req, flush=True)
         if req["cmd"] == "identify":
             write({"seq": req["seq"], "result": {"profile": profile}})
         elif req["cmd"] == "list":
-            write({"seq": req["seq"], "result": [{"id": 4, "window": 1, "active": True, "title": "Pull requests", "url": "https://github.com/pulls?q=is%3Aopen&sort=updated"}]})
+            write({"seq": req["seq"], "result": [{"id": 4, "window": 1, "group": 7, "active": True, "title": "Pull requests", "url": "https://github.com/pulls?q=is%3Aopen&sort=updated"}]})
+        elif req["cmd"] == "groups":
+            write({"seq": req["seq"], "result": [{"id": 7, "window": 1, "title": "chromectl", "lastAccessed": 1761900000000.5}]})
+        elif req["cmd"] == "activate-group":
+            write({"seq": req["seq"], "result": {"id": 4, "window": 1, "created": False, "title": "Pull requests"}})
         elif req["cmd"] == "open":
             write({"seq": req["seq"], "result": {"id": 5, "window": 1}})
         else:
@@ -38,15 +42,18 @@ print("socket:", os.path.basename(sock), flush=True)
 # This script is the host's parent, so it is the "browser" the name records.
 browser = os.path.basename(sock).split(".")[1]
 url = "https://github.com/pulls?q=is%3Aopen&sort=updated"
-tab, window = profile + ":4", profile + ":1"
-listed = json.dumps([{"id": tab, "window": window, "active": True, "browser": browser, "profile": profile, "title": "Pull requests", "url": url}], separators=(",", ":"))
+tab, window, group = profile + ":4", profile + ":1", profile + ":7"
+listed = json.dumps([{"id": tab, "window": window, "group": group, "active": True, "browser": browser, "profile": profile, "title": "Pull requests", "url": url}], separators=(",", ":"))
 # Each case: the arguments, then the exit code, stdout and stderr the CLI must give.
 cases = (
-    (["list"], 0, "\t".join([tab, window, "*", browser, "Pull requests", url]) + "\n", ""),
+    (["list"], 0, "\t".join([tab, window, group, "*", browser, "Pull requests", url]) + "\n", ""),
+    (["groups"], 0, "\t".join([group, window, "chromectl"]) + "\n", ""),
+    (["activate-group", "--timeout", "2s", "chromectl", "https://github.com/hk9890/chromectl"], 0, "\t".join([tab, window, "false", "Pull requests"]) + "\n", ""),
     (["list", "--json"], 0, listed + "\n", ""),
     (["open", "https://example.com", window], 0, profile + ":5\t" + window + "\n", ""),
     (["open", "--json", "https://example.com"], 0, '{"id":"%s:5","window":"%s"}\n' % (profile, window), ""),
     (["activate", profile + ":99"], 1, "", "chromectl: No tab with id: 99.\n"),
+    (["activate", "99"], 2, "", 'chromectl: tab id "99" is not of the form <profile>:<number> that list prints\n'),
 )
 def cli(args):
     try: return subprocess.run(["./bin/chromectl"] + args, env=env, capture_output=True, text=True, timeout=5)
@@ -57,7 +64,7 @@ for args, code, out, err in cases:
     if (r.returncode, r.stdout, r.stderr) != (code, out, err):
         fail("want %d %r %r" % (code, out, err))
 t.join(timeout=5)
-if len(served) != 6: fail("the extension answered %d of six requests" % len(served))
+if len(served) != 9: fail("the extension answered %d of nine requests" % len(served))
 p.stdin.close()
 try: p.wait(timeout=2)
 except subprocess.TimeoutExpired: fail("the host did not exit 2s after its stdin closed")
@@ -66,5 +73,5 @@ if p.returncode != 0: fail("the host exited %d" % p.returncode)
 if os.path.exists(sock): fail("the host left its socket " + sock)
 r = cli(["list"])
 print("$ chromectl list, host gone ->", r.returncode, repr(r.stderr))
-if r.returncode != 1 or "no chromectl host is listening" not in r.stderr: fail("want ErrNoHost")
+if r.returncode != 5 or "no chromectl host is listening" not in r.stderr: fail("want ErrNoHost, exit 5")
 print("PASS")

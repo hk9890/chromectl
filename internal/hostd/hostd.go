@@ -48,7 +48,7 @@ type Self struct {
 // Chrome closes the pipe, and returns once every call that reached Chrome has
 // written its reply, so the process does not exit under it.
 func Run(fromChrome io.Reader, toChrome io.Writer, dir string, self Self) error {
-	h := &host{toChrome: toChrome, pending: map[uint64]chan proto.Reply{}, inFlight: map[net.Conn]struct{}{}}
+	h := &host{toChrome: toChrome, pending: map[uint64]chan answer{}, inFlight: map[net.Conn]struct{}{}}
 
 	readErr := make(chan error, 1)
 	readDone := make(chan struct{})
@@ -58,10 +58,11 @@ func Run(fromChrome io.Reader, toChrome io.Writer, dir string, self Self) error 
 	}()
 
 	var id proto.Identity
-	reply, _ := h.ask(nil, proto.Request{Cmd: "identify"})
-	if strings.HasPrefix(reply.Error, proto.ChromeGone) {
+	a, _ := h.ask(nil, proto.Request{Cmd: "identify"})
+	if a.gone != nil {
 		return chromeEnded(<-readErr)
 	}
+	reply := a.reply
 	if reply.Error == "" {
 		_ = json.Unmarshal(reply.Result, &id)
 	}
@@ -183,10 +184,16 @@ type host struct {
 	writeMu      sync.Mutex
 	mu           sync.Mutex
 	seq          uint64
-	pending      map[uint64]chan proto.Reply
+	pending      map[uint64]chan answer
 	gone         error
 	inFlight     map[net.Conn]struct{}
 	inFlightDone sync.WaitGroup
+}
+
+// answer is what a call gets: Chrome's reply, or why there is none.
+type answer struct {
+	reply proto.Reply
+	gone  error
 }
 
 func (h *host) readReplies(r io.Reader) error {
@@ -214,33 +221,32 @@ func (h *host) readReplies(r io.Reader) error {
 		delete(h.pending, reply.Seq)
 		h.mu.Unlock()
 		if ok {
-			ch <- reply
+			ch <- answer{reply: reply}
 		} else {
 			log.Printf("reply for unknown seq %d: %s", reply.Seq, reply.Error)
 		}
 	}
 }
 
+// failAll ends every pending call with no reply: Chrome is gone, and may or
+// may not have carried each one out.
 func (h *host) failAll(err error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.gone = err
-	h.failPending(goneMsg(err))
+	for seq, ch := range h.pending {
+		ch <- answer{gone: err}
+		delete(h.pending, seq)
+	}
 }
 
 // failPending answers every pending call with msg. The caller holds h.mu.
 func (h *host) failPending(msg string) {
 	for seq, ch := range h.pending {
-		ch <- proto.Reply{Seq: seq, Error: msg}
+		ch <- answer{reply: proto.Reply{Seq: seq, Error: msg}}
 		delete(h.pending, seq)
 	}
 }
-
-func goneReply(seq uint64, err error) proto.Reply {
-	return proto.Reply{Seq: seq, Error: goneMsg(err)}
-}
-
-func goneMsg(err error) string { return proto.ChromeGone + ": " + err.Error() }
 
 // limitLastReplies gives each call in flight lastReplyWindow to write its
 // reply. Run calls it after Chrome is gone, when no call can start any more.
@@ -263,8 +269,14 @@ func (h *host) serve(conn net.Conn) {
 		_ = json.NewEncoder(conn).Encode(proto.Reply{Error: h.stale})
 		return
 	}
-	reply, inFlight := h.ask(conn, req)
-	_ = json.NewEncoder(conn).Encode(reply)
+	a, inFlight := h.ask(conn, req)
+	if a.gone != nil {
+		// No reply at all: only Chrome's replies reach the caller, and a
+		// connection closed without one tells it the outcome is unknown.
+		log.Printf("%s: chrome went away: %v", req.Cmd, a.gone)
+	} else {
+		_ = json.NewEncoder(conn).Encode(a.reply)
+	}
 	if inFlight {
 		h.mu.Lock()
 		delete(h.inFlight, conn)
@@ -276,14 +288,15 @@ func (h *host) serve(conn net.Conn) {
 // ask relays req to Chrome and waits for its reply. It reports whether the
 // caller's conn went in flight, which Run waits for; a call made after
 // Chrome is gone does not, nor the host's own call, which has no conn.
-func (h *host) ask(conn net.Conn, req proto.Request) (reply proto.Reply, inFlight bool) {
-	ch := make(chan proto.Reply, 1)
+func (h *host) ask(conn net.Conn, req proto.Request) (a answer, inFlight bool) {
+	ch := make(chan answer, 1)
 	h.mu.Lock()
 	h.seq++
 	req.Seq = h.seq
 	if gone := h.gone; gone != nil {
+		// Nothing is sent, so the call can be told so.
 		h.mu.Unlock()
-		return goneReply(req.Seq, gone), false
+		return answer{reply: proto.Reply{Seq: req.Seq, Error: "chrome went away: " + gone.Error()}}, false
 	}
 	h.pending[req.Seq] = ch
 	inFlight = conn != nil
@@ -293,6 +306,12 @@ func (h *host) ask(conn net.Conn, req proto.Request) (reply proto.Reply, inFligh
 	}
 	h.mu.Unlock()
 
+	if _, err := native.Encode(req); err != nil {
+		h.mu.Lock()
+		delete(h.pending, req.Seq)
+		h.mu.Unlock()
+		return answer{reply: proto.Reply{Seq: req.Seq, Error: err.Error()}}, inFlight
+	}
 	h.writeMu.Lock()
 	err := native.Write(h.toChrome, req)
 	h.writeMu.Unlock()
@@ -300,7 +319,7 @@ func (h *host) ask(conn net.Conn, req proto.Request) (reply proto.Reply, inFligh
 		h.mu.Lock()
 		delete(h.pending, req.Seq)
 		h.mu.Unlock()
-		return goneReply(req.Seq, err), inFlight
+		return answer{gone: err}, inFlight
 	}
 	return <-ch, inFlight
 }

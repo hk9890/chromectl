@@ -24,19 +24,33 @@ import (
 
 const usage = `usage: chromectl <command> [args]
 
-  list [--json]                every tab of every profile: id, window, active,
-                               browser, title, url (tab-separated, or a JSON array)
+  list [--json]                every tab of every profile: id, window, group,
+                               active, browser, title, url (tab-separated, or a
+                               JSON array)
+  groups [--json]              every open tab group: id, window, title
   activate <tab-id>            activate the tab and focus its window
+  activate-group [--json] <title> <url> [window]
+                               raise the tab group titled title: activate its tab
+                               at url, else under url, else its last used tab.
+                               Without such a group, open url in a new group with
+                               that title, in the given window or the last
+                               focused one. Prints the tab's id, its window,
+                               whether the group was created, and the tab's title
   open [--json] <url> [window] open url in a new tab, in the given window or the
-                               last focused one; prints its id and window. With
-                               several profiles, the window id is required
+                               last focused one; prints its id and window
   close <tab-id>               close the tab
   install                      copy this binary and the extension to ~/.local/share/chromectl
                                and register that copy as the native messaging host
   version                      print the version
   host                         the native messaging host; Chrome starts this, not you
 
-Tab and window ids are <profile>:<number>, as list prints them.
+Tab, window and group ids are <profile>:<number>, as list prints them. With
+several profiles, open, and activate-group where it creates a group, need a
+window id.
+
+Every command that calls Chrome takes --timeout <duration> (default 5s) before
+its arguments. Exit codes: 1 an error from Chrome or chromectl, 2 bad usage,
+4 no reply (the command may or may not have taken effect), 5 no host.
 `
 
 func main() {
@@ -58,6 +72,10 @@ func main() {
 		err = tabCommand("activate", args)
 	case "close":
 		err = tabCommand("close", args)
+	case "groups":
+		err = groups(os.Stdout, args)
+	case "activate-group":
+		err = activateGroup(os.Stdout, args)
 	case "open":
 		err = open(os.Stdout, args)
 	case "install":
@@ -74,7 +92,7 @@ func main() {
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "chromectl:", err)
-		os.Exit(1)
+		os.Exit(exitCode(err))
 	}
 }
 
@@ -101,7 +119,7 @@ func host() error {
 // Chrome-family config directory that exists, pointing at that copy.
 func install(args []string) error {
 	if len(args) != 0 {
-		return fmt.Errorf("install takes no arguments")
+		return badUsage("install takes no arguments")
 	}
 	data, err := xdgDir("XDG_DATA_HOME", ".local/share")
 	if err != nil {

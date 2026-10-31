@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -22,8 +23,21 @@ import (
 // the extension is not loaded, or `chromectl install` was never run.
 var ErrNoHost = errors.New("no chromectl host is listening: is Chrome running with the chromectl extension loaded, and was `chromectl install` run?")
 
-// callTimeout is how long a call waits for its reply.
-var callTimeout = 10 * time.Second
+// Timeout is how long a call waits, from its connect to the last byte of
+// its reply. The CLI's --timeout sets it.
+var Timeout = 5 * time.Second
+
+// NoReplyError is a call that got no reply: the timeout passed, or the host
+// closed the connection, as when Chrome went away. Chrome may or may not
+// carry the command out. It unwraps to os.ErrDeadlineExceeded or io.EOF.
+type NoReplyError struct {
+	msg string
+	err error
+}
+
+func (e *NoReplyError) Error() string { return e.msg }
+
+func (e *NoReplyError) Unwrap() error { return e.err }
 
 // SocketDir is the directory every host's socket is in. Without
 // XDG_RUNTIME_DIR, as under cron, it is /run/user/<uid>, the directory a
@@ -163,7 +177,8 @@ func newestPerBrowser(hosts []Host) []Host {
 // the connection belongs to a host that is dead: Call removes it and returns
 // ErrNoHost.
 func Call(socketPath string, req proto.Request, out any) error {
-	conn, err := net.Dial("unix", socketPath)
+	deadline := time.Now().Add(Timeout)
+	conn, err := (&net.Dialer{Deadline: deadline}).Dial("unix", socketPath)
 	if err != nil && dead(socketPath) {
 		return ErrNoHost
 	}
@@ -171,15 +186,21 @@ func Call(socketPath string, req proto.Request, out any) error {
 		return fmt.Errorf("connect to the chromectl host: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
-	_ = conn.SetDeadline(time.Now().Add(callTimeout))
-	if err := json.NewEncoder(conn).Encode(req); err != nil {
-		return err
-	}
+	_ = conn.SetDeadline(deadline)
+	step := "send request"
+	err = json.NewEncoder(conn).Encode(req)
 	var reply proto.Reply
-	if err := json.NewDecoder(conn).Decode(&reply); errors.Is(err, os.ErrDeadlineExceeded) {
-		return fmt.Errorf("no reply in %s; Chrome may still carry the command out", callTimeout)
-	} else if err != nil {
-		return fmt.Errorf("read reply: %w", err)
+	if err == nil {
+		step = "read reply"
+		err = json.NewDecoder(conn).Decode(&reply)
+	}
+	switch {
+	case errors.Is(err, os.ErrDeadlineExceeded):
+		return &NoReplyError{fmt.Sprintf("no reply in %s; Chrome may still carry the command out", Timeout), os.ErrDeadlineExceeded}
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, syscall.EPIPE), errors.Is(err, syscall.ECONNRESET):
+		return &NoReplyError{"no reply: the chromectl host closed the connection, as when Chrome goes away; Chrome may or may not have carried the command out", io.EOF}
+	case err != nil:
+		return fmt.Errorf("%s: %w", step, err)
 	}
 	if reply.Error != "" {
 		return errors.New(reply.Error)

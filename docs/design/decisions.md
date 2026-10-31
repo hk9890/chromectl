@@ -52,6 +52,45 @@ id already names its profile, and both need a `list` to learn the value.
 the pid, and the CLI asked each host who it was. Every command for one tab then
 dialled every host, and one hung host held them all.
 
+**The CLI prints the window manager's title.** chromectl would print
+`<active tab title> - Google Chrome`, the title a normal Chrome window shows,
+so the caller hands it to wctl as is. Rejected because chromectl would print a
+guess as a fact. The suffix is a Chrome UI string no extension can read: it is
+" - Chromium" in Chromium and something else in Brave. A window the user named
+shows the name alone, and the extension cannot read that name either. The tab
+title is what Chrome says, so chromectl prints that, and the caller, which
+knows its browser, adds the suffix.
+
+**A window type in `list`.** Each tab would carry its window's type, so a
+caller that matches by URL could skip the tabs of `--app` windows. Rejected for
+now: the planned consumer, revier's project key, addresses groups, and a group
+cannot live in an `--app` window, so nothing would read the field. It is one
+more Chrome call when a consumer needs it.
+
+**Open-or-activate by URL prefix.** One call would find a tab whose URL starts
+with a prefix, or open the URL. Rejected: it makes chromectl the judge of when
+a page is open, which is the matcher [product.md](product.md#model) leaves to
+the caller.
+
+**`open --group` and a raise-only `activate-group`.** `open --group <title>
+<url>` would add a tab to a group, creating it if needed, and an
+`activate-group <title>` without a URL would raise a group or fail. Rejected:
+`activate-group <title> <url>` does both jobs the consumer has in one call, no
+consumer adds a tab to an existing group, and a raise that can fail on a
+missing group needs a "not found" exit code that nothing else needs.
+
+**A deadline in the host.** The host would answer a pending call with an error
+after a fixed time. Rejected: it cannot cancel what the extension has started,
+so the call might still act after the caller was told it failed, and it would
+be a second deadline the caller cannot set. The CLI's deadline already frees
+the caller.
+
+**A flag on the reply for "the host could not get an answer".** The host would
+reply `{seq, error, lost: true}` where Chrome went away, so the CLI could tell
+it from Chrome's own error and keep the text "chrome went away". Rejected:
+closing the connection without a reply says the same thing with no new field,
+and the CLI already has to handle a connection that closes early.
+
 ## Superseded
 
 These held in v0.1.0 and were replaced when chromectl gave every profile its
@@ -68,4 +107,21 @@ and two browsers can hand out the same one.
 
 **The socket's lifetime as the only timeout.** A call waited as long as its
 connection stayed open. With several hosts, `list` waits for all of them, and
-one hung host would hold every call; a call now gives up after 10 seconds.
+one hung host would hold every call; a call now has a deadline.
+
+These were replaced when chromectl learned tab groups.
+
+**A fixed 10-second limit per call.** Long enough for a Chrome that restores a
+session, too long for a keypress, and no caller could change it, so callers
+wrapped chromectl in `timeout`. The deadline is now 5 seconds, and `--timeout`
+sets it.
+
+**"chrome went away" as an error reply.** The host answered a call it could
+not finish with that text, and the CLI exited 1, as for Chrome's own error. A
+caller could not tell "Chrome refused" from "Chrome may have acted" without
+reading the text. The host now closes the connection without a reply, and the
+CLI exits 4.
+
+**Exit 1 for every failure.** A bad argument, a missing host and Chrome's
+refusal all exited 1. A caller that falls back when no host runs could not
+tell that from a typo. Each now has its own code.

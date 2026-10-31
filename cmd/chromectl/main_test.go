@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -40,6 +42,12 @@ func runtimeDir(t *testing.T) string {
 // request to got.
 func startHost(t *testing.T, profile, browser string, browserPID int, tabs []proto.Tab, got chan<- proto.Request) {
 	t.Helper()
+	startHostWithGroups(t, profile, browser, browserPID, tabs, nil, got)
+}
+
+// startHostWithGroups is startHost whose extension also holds groups.
+func startHostWithGroups(t *testing.T, profile, browser string, browserPID int, tabs []proto.Tab, groups []proto.Group, got chan<- proto.Request) {
+	t.Helper()
 	sockets := runtimeSockets()
 	toHost, fromExt := io.Pipe()
 	fromHost, toExt := io.Pipe()
@@ -63,6 +71,8 @@ func startHost(t *testing.T, profile, browser string, browserPID int, tabs []pro
 				result = proto.Identity{Profile: profile}
 			case req.Cmd == "list":
 				result = tabs
+			case req.Cmd == "groups":
+				result = groups
 			default:
 				got <- req
 				result = proto.Tab{ID: 900 + req.Tab, Window: max(req.Window, 1)}
@@ -108,15 +118,15 @@ func TestParseIDReadsTheFormListPrints(t *testing.T) {
 
 func TestListShowsEveryProfile(t *testing.T) {
 	runtimeDir(t)
-	startHost(t, "aaaa0001", "chrome", 1, []proto.Tab{{ID: 4, Window: 1, Active: true, Title: "PRs", URL: "https://github.com/pulls"}}, nil)
-	startHost(t, "bbbb0002", "brave", 2, []proto.Tab{{ID: 4, Window: 3, Title: "News", URL: "https://orf.at"}}, nil)
+	startHost(t, "aaaa0001", "chrome", 1, []proto.Tab{{ID: 4, Window: 1, Group: 7, Active: true, Title: "PRs", URL: "https://github.com/pulls"}}, nil)
+	startHost(t, "bbbb0002", "brave", 2, []proto.Tab{{ID: 4, Window: 3, Group: -1, Title: "News", URL: "https://orf.at"}}, nil)
 
 	var out bytes.Buffer
 	if err := list(&out, nil); err != nil {
 		t.Fatal(err)
 	}
-	want := "aaaa0001:4\taaaa0001:1\t*\tchrome\tPRs\thttps://github.com/pulls\n" +
-		"bbbb0002:4\tbbbb0002:3\t-\tbrave\tNews\thttps://orf.at\n"
+	want := "aaaa0001:4\taaaa0001:1\taaaa0001:7\t*\tchrome\tPRs\thttps://github.com/pulls\n" +
+		"bbbb0002:4\tbbbb0002:3\t-\t-\tbrave\tNews\thttps://orf.at\n"
 	if out.String() != want {
 		t.Fatalf("list =\n%s\nwant\n%s", out.String(), want)
 	}
@@ -129,8 +139,213 @@ func TestListShowsEveryProfile(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &rows); err != nil || len(rows) != 2 {
 		t.Fatalf("list --json = %s, %v", out.String(), err)
 	}
-	if r := rows[1]; r["id"] != "bbbb0002:4" || r["window"] != "bbbb0002:3" || r["browser"] != "brave" || r["profile"] != "bbbb0002" {
+	if r := rows[1]; r["id"] != "bbbb0002:4" || r["window"] != "bbbb0002:3" || r["group"] != "" || r["browser"] != "brave" || r["profile"] != "bbbb0002" {
 		t.Fatalf("row = %v", r)
+	}
+	if r := rows[0]; r["group"] != "aaaa0001:7" {
+		t.Fatalf("row = %v", r)
+	}
+}
+
+func TestGroupsShowsEveryProfile(t *testing.T) {
+	runtimeDir(t)
+	startHostWithGroups(t, "aaaa0001", "chrome", 1, nil, []proto.Group{{ID: 7, Window: 1, Title: "chromectl"}}, nil)
+	startHostWithGroups(t, "bbbb0002", "brave", 2, nil, []proto.Group{{ID: 8, Window: 3, Title: "revier"}}, nil)
+
+	var out bytes.Buffer
+	if err := groups(&out, nil); err != nil {
+		t.Fatal(err)
+	}
+	if want := "aaaa0001:7\taaaa0001:1\tchromectl\nbbbb0002:8\tbbbb0002:3\trevier\n"; out.String() != want {
+		t.Fatalf("groups =\n%s\nwant\n%s", out.String(), want)
+	}
+}
+
+// Of two profiles that hold a group of the title, the one that used it last
+// raises it; the window id is only where a new group would go.
+func TestActivateGroupGoesToTheProfileThatUsedTheGroupLast(t *testing.T) {
+	runtimeDir(t)
+	a, b := make(chan proto.Request, 1), make(chan proto.Request, 1)
+	startHostWithGroups(t, "aaaa0001", "chrome", 1, nil, []proto.Group{{ID: 7, Window: 1, Title: "chromectl", LastAccessed: 100}}, a)
+	startHostWithGroups(t, "bbbb0002", "brave", 2, nil, []proto.Group{{ID: 8, Window: 3, Title: "chromectl", LastAccessed: 200}, {ID: 9, Window: 3, Title: "chromectl2", LastAccessed: 300}}, b)
+
+	var out bytes.Buffer
+	if err := activateGroup(&out, []string{"chromectl", "https://example.com/chromectl", "aaaa0001:1"}); err != nil {
+		t.Fatal(err)
+	}
+	if req := <-b; req.Cmd != "activate-group" || req.Title != "chromectl" || req.URL != "https://example.com/chromectl" || req.Window != 0 {
+		t.Fatalf("profile bbbb0002 got %+v", req)
+	}
+	if len(a) != 0 {
+		t.Fatalf("profile aaaa0001 got %+v", <-a)
+	}
+	if out.String() != "bbbb0002:900\tbbbb0002:1\tfalse\t\n" {
+		t.Fatalf("activate-group printed %q", out.String())
+	}
+}
+
+// Without the group, the one profile that runs creates it. Titles compare
+// exactly.
+func TestActivateGroupCreatesInTheOnlyProfile(t *testing.T) {
+	runtimeDir(t)
+	got := make(chan proto.Request, 1)
+	startHostWithGroups(t, "aaaa0001", "chrome", 1, nil, []proto.Group{{ID: 7, Window: 1, Title: "Chromectl"}}, got)
+
+	if err := activateGroup(io.Discard, []string{"chromectl", "https://example.com/chromectl"}); err != nil {
+		t.Fatal(err)
+	}
+	if req := <-got; req.Cmd != "activate-group" || req.Title != "chromectl" || req.Window != 0 {
+		t.Fatalf("the extension got %+v", req)
+	}
+}
+
+// Without the group and with several profiles, the window id names the
+// profile that creates it; without one, it is bad usage.
+func TestActivateGroupWithSeveralProfilesCreatesInTheWindowsProfile(t *testing.T) {
+	runtimeDir(t)
+	got := make(chan proto.Request, 1)
+	startHost(t, "aaaa0001", "chrome", 1, []proto.Tab{{ID: 4, Window: 1}}, nil)
+	startHost(t, "bbbb0002", "brave", 2, []proto.Tab{{ID: 5, Window: 3}}, got)
+
+	err := activateGroup(io.Discard, []string{"chromectl", "https://example.com/chromectl"})
+	if err == nil || !strings.HasPrefix(err.Error(), "several Chrome profiles run, so activate-group needs a window id") || exitCode(err) != 2 {
+		t.Fatalf("err = %v", err)
+	}
+	if err := activateGroup(io.Discard, []string{"chromectl", "https://example.com/chromectl", "bbbb0002:3"}); err != nil {
+		t.Fatal(err)
+	}
+	if req := <-got; req.Window != 3 {
+		t.Fatalf("the extension got %+v", req)
+	}
+}
+
+func TestActivateGroupNeedsATitleAndAURL(t *testing.T) {
+	runtimeDir(t)
+	if err := activateGroup(io.Discard, []string{"", "https://example.com"}); exitCode(err) != 2 {
+		t.Fatalf("empty title: err = %v", err)
+	}
+	if err := activateGroup(io.Discard, []string{"proj", ""}); exitCode(err) != 2 {
+		t.Fatalf("empty url: err = %v", err)
+	}
+}
+
+// fakeSocket serves a host socket for profile in sockets whose every
+// connection gets reply, or is closed without one where reply is nil.
+func fakeSocket(t *testing.T, sockets, profile string, browserPID int, reply *proto.Reply) {
+	t.Helper()
+	if err := os.MkdirAll(sockets, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("unix", filepath.Join(sockets, client.SocketName(profile, "brave", browserPID, starts.Add(1))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			var req proto.Request
+			_ = json.NewDecoder(conn).Decode(&req)
+			if reply != nil {
+				_ = json.NewEncoder(conn).Encode(reply)
+			}
+			_ = conn.Close()
+		}
+	}()
+}
+
+// A profile that answers groups with an error holds no group activate-group
+// could raise, so the group is created elsewhere; one that gives no reply may
+// hold it, so none is.
+func TestActivateGroupCreatesUnlessAProfileGaveNoReply(t *testing.T) {
+	sockets := runtimeDir(t)
+	got := make(chan proto.Request, 1)
+	startHost(t, "aaaa0001", "chrome", 1, []proto.Tab{{ID: 4, Window: 1}}, got)
+	fakeSocket(t, sockets, "bbbb0002", 2, &proto.Reply{Error: "unknown command groups"})
+
+	if err := activateGroup(io.Discard, []string{"proj", "https://example.com/proj", "aaaa0001:1"}); err != nil {
+		t.Fatal(err)
+	}
+	if req := <-got; req.Cmd != "activate-group" || req.Window != 1 {
+		t.Fatalf("the extension got %+v", req)
+	}
+
+	fakeSocket(t, sockets, "cccc0003", 3, nil)
+	err := activateGroup(io.Discard, []string{"proj", "https://example.com/proj", "aaaa0001:1"})
+	if err == nil || err.Error() != "the group search is incomplete: a host above failed" || exitCode(err) != 4 {
+		t.Fatalf("err = %v, code %d", err, exitCode(err))
+	}
+	if len(got) != 0 {
+		t.Fatalf("the extension got %+v", <-got)
+	}
+}
+
+// A host that closes the connection without a reply failed: list says so
+// and exits 4, rather than leaving the profile out.
+func TestListReportsAHostThatGaveNoReply(t *testing.T) {
+	sockets := runtimeDir(t)
+	startHost(t, "aaaa0001", "chrome", 1, []proto.Tab{{ID: 4, Window: 1}}, nil)
+	fakeSocket(t, sockets, "bbbb0002", 2, nil)
+
+	var out bytes.Buffer
+	err := list(&out, nil)
+	if err == nil || exitCode(err) != 4 {
+		t.Fatalf("err = %v, code %d", err, exitCode(err))
+	}
+	if !strings.HasPrefix(out.String(), "aaaa0001:4\t") {
+		t.Fatalf("list = %q", out.String())
+	}
+}
+
+// Where no profile answers, open reports why, not that it needs a window.
+func TestOpenWhereNoProfileAnswersSaysWhy(t *testing.T) {
+	sockets := runtimeDir(t)
+	fakeSocket(t, sockets, "aaaa0001", 1, nil)
+	fakeSocket(t, sockets, "bbbb0002", 2, nil)
+
+	if err := open(io.Discard, []string{"https://example.com"}); exitCode(err) != 4 {
+		t.Fatalf("err = %v, code %d", err, exitCode(err))
+	}
+}
+
+// Without a runtime directory no host can listen: that is no host, exit 5.
+func TestNoSocketDirIsNoHost(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	if _, err := os.Stat(fmt.Sprintf("/run/user/%d", os.Getuid())); err == nil {
+		t.Skip("this machine has /run/user/<uid>")
+	}
+	if err := list(io.Discard, nil); exitCode(err) != 5 {
+		t.Fatalf("err = %v, code %d", err, exitCode(err))
+	}
+}
+
+func TestTimeoutMustBeMoreThanZero(t *testing.T) {
+	runtimeDir(t)
+	if err := list(io.Discard, []string{"--timeout", "0s"}); exitCode(err) != 2 {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestExitCodes(t *testing.T) {
+	runtimeDir(t)
+	if err := list(io.Discard, nil); exitCode(err) != 5 {
+		t.Fatalf("no host: err = %v, code %d", err, exitCode(err))
+	}
+	if err := tabCommand("activate", []string{"812"}); exitCode(err) != 2 {
+		t.Fatalf("bad id: err = %v, code %d", err, exitCode(err))
+	}
+	if err := tabCommand("activate", []string{"cccc0003:1", "extra"}); exitCode(err) != 2 {
+		t.Fatalf("extra argument: err = %v, code %d", err, exitCode(err))
+	}
+	startHost(t, "aaaa0001", "chrome", 1, nil, nil)
+	if err := tabCommand("activate", []string{"cccc0003:4"}); exitCode(err) != 5 {
+		t.Fatalf("no host for the profile: err = %v, code %d", err, exitCode(err))
+	}
+	if code := exitCode(errors.New("No tab with id: 99.")); code != 1 {
+		t.Fatalf("Chrome's error: code %d", code)
 	}
 }
 
