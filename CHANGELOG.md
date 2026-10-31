@@ -10,11 +10,14 @@ is older than chromectl.
 **Action required:** a script that reads chromectl output must change:
 
 - Tab, window and group ids are now `<profile>:<number>`, for example
-  `3f9a12bc:812`, as `list` prints them. `activate 812` no longer works.
+  `3f9a12bc:812`, as `list` prints them. A bare number such as
+  `activate 812`, `close 812` or `open <url> 5` is a usage error.
+- In `--json` output, `id` and `window` are strings, not numbers.
 - `list` has two new columns: `group` after `window`, and `browser` after
-  `active`.
+  `active`. `list --json` has the same two new fields.
 - Exit codes now tell the failures apart: 1 an error from Chrome or
-  chromectl, 2 bad usage (before: 1), 4 no reply, 5 no host.
+  chromectl, 2 bad usage, 4 no reply, 5 no host. Before, wrong arguments and
+  bad flags exited 1.
 
 New:
 
@@ -38,7 +41,7 @@ Fixed:
 - A command no longer fails when another command gets a bad answer from
   Chrome. A command in flight when Chrome closes exits 4 (no reply) and no
   longer hangs.
-- Tab and window id 0 is refused. Before, it acted on the current tab.
+- Id 0 is refused. Before, `activate 0` acted on the current tab.
 - `install` no longer leaves the extension missing when the copy fails.
 - Without `XDG_RUNTIME_DIR`, for example under cron, chromectl finds the host
   in `/run/user/<uid>`.
