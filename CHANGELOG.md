@@ -4,8 +4,8 @@
 
 **Action required:** after the upgrade, run `chromectl install`, then click
 reload on the chromectl card at `chrome://extensions` in every profile that
-loads it. Until then, chromectl finds no host, and `groups` and
-`activate-group` answer "unknown command".
+loads it. Until then, chromectl finds no host, or answers that the extension
+is older than chromectl.
 
 **Action required:** a script that reads chromectl output must change:
 
@@ -20,28 +20,28 @@ New:
 
 - chromectl reaches every profile of every browser that loads the extension.
   `list` prints the tabs of all of them. Before, only the profile that started
-  last answered. With several profiles, `open` needs a window id.
+  last answered. With several profiles, `open`, and `activate-group` when it
+  creates a group, need a window id.
 - `chromectl groups` prints every open tab group: id, window and title.
 - `chromectl activate-group <title> <url> [window]` raises the tab group
   titled `<title>` and activates its tab at `<url>`, else a tab under `<url>`,
   else its last used tab. Without such a group, it opens `<url>` in a new
   group with that title. Two quick calls create one group, not two.
-- Every command that calls Chrome gives up after 5 seconds. `--timeout`
-  changes the limit.
+- Each call to Chrome gives up after 5 seconds. `--timeout` changes the
+  limit.
 
 Fixed:
 
 - chromectl answers after Chrome restarts, without a reload of the extension.
 - chromectl answers after a reload of the extension. Before, it reported no
   host until the next reload.
-- A command no longer hangs or fails when another command gets a bad answer
-  from Chrome, or when Chrome closes mid-call.
+- A command no longer fails when another command gets a bad answer from
+  Chrome. A command in flight when Chrome closes exits 4 (no reply) and no
+  longer hangs.
 - Tab and window id 0 is refused. Before, it acted on the current tab.
 - `install` no longer leaves the extension missing when the copy fails.
 - Without `XDG_RUNTIME_DIR`, for example under cron, chromectl finds the host
   in `/run/user/<uid>`.
-- `chromectl version` prints the version without a leading `v`, the same for
-  a release and a source build.
 
 ## v0.1.0
 
