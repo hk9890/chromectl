@@ -112,16 +112,17 @@ one hung host would hold every call; a call now has a deadline.
 These were replaced when chromectl learned tab groups.
 
 **The `tabs` permission alone.** The extension asked for `tabs` and
-`nativeMessaging` only, and a command that needed more was a different
-product. A group's title and its collapsed state need `tabGroups`, and finding
-a group by its title is the job a project key has. Why the trust level stays
-the one `tabs` set is in [product.md](product.md#scope).
+`nativeMessaging` only. Finding a group by its title is the job a project key
+has, and that needs `tabGroups`, so the set grew by one. The rule that a
+command needing more is a different product still stands, for the set as it
+is now. Why `tabGroups` fits is in [Scope](product.md#scope).
 
-**No URL judgement in chromectl.** The caller matched every URL, and chromectl
-never chose a tab by one. `activate-group` now ranks the tabs of the group its
-title found by the URL it was given, so the one exception is inside a group
-already found. The ranking and why the caller still owns matching are in
-[product.md](product.md#groups) and [product.md](product.md#model).
+**chromectl never reads a URL to choose a tab.** The caller matched every URL.
+Now `activate-group` uses the URL it was given to rank the tabs inside the
+group that its title found. That is the only exception: a matcher of its own
+stays rejected, as "Open-or-activate by URL prefix" above says. The ranking is
+in [Groups](product.md#groups), and why the caller still owns matching is in
+[Model](product.md#model).
 
 **A fixed 10-second limit per call.** Long enough for a Chrome that restores a
 session, too long for a keypress, and no caller could change it, so callers

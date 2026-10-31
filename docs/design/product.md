@@ -56,6 +56,8 @@ call:
    several tie: a tab whose URL equals `url`; a tab whose URL starts with
    `url` followed by `/`, `?` or `#`; any tab of the group. The boundary keeps
    `github.com/o/repo` from ranking `github.com/o/repo-tools` as its page.
+   `url` is first read the way Chrome stores a tab's URL, so a tab at
+   `https://example.com/` is at `https://Example.com`.
 4. If none is found: open `url` in a new tab of the window, else of the last
    focused normal window, put the tab in a new group, give the group the
    title, and focus the window. Where no normal window exists, open a new one.
