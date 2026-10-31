@@ -19,15 +19,18 @@ import (
 	"github.com/hk9890/chromectl/internal/proto"
 )
 
-// Run serves socketPath until fromChrome reaches EOF. The socket is removed
-// on the way out.
+// Run serves socketPath until fromChrome reaches EOF. It replaces whatever
+// socket is at the path on start and leaves its own in place on exit: a
+// reload of the extension starts the next host, which binds the path anew,
+// before Chrome closes this host's pipe, and a dead socket refuses the CLI
+// as an absent one does.
 func Run(fromChrome io.Reader, toChrome io.Writer, socketPath string) error {
 	_ = os.Remove(socketPath)
-	ln, err := net.Listen("unix", socketPath)
+	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: socketPath, Net: "unix"})
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.Remove(socketPath) }()
+	ln.SetUnlinkOnClose(false)
 	defer func() { _ = ln.Close() }()
 
 	h := &host{toChrome: toChrome, pending: map[uint64]chan proto.Reply{}}

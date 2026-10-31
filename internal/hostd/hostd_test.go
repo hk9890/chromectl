@@ -3,6 +3,7 @@ package hostd_test
 import (
 	"encoding/json"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,9 +19,17 @@ import (
 // reads with a reply carrying the same seq.
 func fakeExtension(t *testing.T, answer func(proto.Request) proto.Reply) (socket string, done func()) {
 	t.Helper()
+	socket = filepath.Join(t.TempDir(), "s.sock")
+	return socket, fakeExtensionAt(t, socket, answer)
+}
+
+// fakeExtensionAt starts a host on socket, which may already hold another
+// host's socket, and returns once this host accepts on it.
+func fakeExtensionAt(t *testing.T, socket string, answer func(proto.Request) proto.Reply) (done func()) {
+	t.Helper()
 	toHost, fromExt := io.Pipe()
 	fromHost, toExt := io.Pipe()
-	socket = filepath.Join(t.TempDir(), "s.sock")
+	before, _ := os.Stat(socket)
 
 	ran := make(chan error, 1)
 	go func() { ran <- hostd.Run(toHost, toExt, socket) }()
@@ -37,20 +46,33 @@ func fakeExtension(t *testing.T, answer func(proto.Request) proto.Reply) (socket
 			}
 		}
 	}()
-	for start := time.Now(); ; time.Sleep(time.Millisecond) {
-		if _, err := os.Stat(socket); err == nil {
-			break
-		}
+	for start := time.Now(); !listening(socket, before); time.Sleep(time.Millisecond) {
 		if time.Since(start) > 2*time.Second {
 			t.Fatal("host never bound its socket")
 		}
 	}
-	return socket, func() {
+	return func() {
 		_ = fromExt.Close()
 		if err := <-ran; err != nil {
 			t.Errorf("Run returned %v after Chrome closed the pipe", err)
 		}
 	}
+}
+
+// listening reports whether a socket other than before is at the path and
+// accepts. The path appears at bind, before listen, so a file alone is not
+// a host that answers.
+func listening(socket string, before os.FileInfo) bool {
+	now, err := os.Stat(socket)
+	if err != nil || before != nil && os.SameFile(before, now) {
+		return false
+	}
+	conn, err := net.Dial("unix", socket)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
 }
 
 func TestListReachesTheExtensionAndComesBack(t *testing.T) {
@@ -118,5 +140,22 @@ func TestWithoutAHostTheClientSaysSo(t *testing.T) {
 	err := client.Call(filepath.Join(t.TempDir(), "absent.sock"), proto.Request{Cmd: "list"}, nil)
 	if err != client.ErrNoHost {
 		t.Fatalf("err = %v, want ErrNoHost", err)
+	}
+}
+
+// A reload of the extension starts the new host before Chrome closes the old
+// host's pipe; the old host must leave the new host's socket in place.
+func TestAnOldHostExitingKeepsTheNewHostsSocket(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "s.sock")
+	oldDone := fakeExtensionAt(t, socket, func(proto.Request) proto.Reply { return proto.Reply{Error: "old host"} })
+	newDone := fakeExtensionAt(t, socket, func(proto.Request) proto.Reply { return proto.Reply{Error: "new host"} })
+	oldDone()
+
+	if err := client.Call(socket, proto.Request{Cmd: "list"}, nil); err == nil || err.Error() != "new host" {
+		t.Fatalf("after the old host exited, Call = %v, want the new host's answer", err)
+	}
+	newDone()
+	if err := client.Call(socket, proto.Request{Cmd: "list"}, nil); err != client.ErrNoHost {
+		t.Fatalf("after every host exited, Call = %v, want ErrNoHost", err)
 	}
 }
