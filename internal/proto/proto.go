@@ -6,11 +6,12 @@ package proto
 import "encoding/json"
 
 // Request names a command and carries its arguments flat, as the extension
-// reads them. Only the fields a command uses are set.
+// reads them. Only the fields a command uses are set. The id is always sent:
+// Chrome reads a missing tab id as the current tab, and a 0 as no tab.
 type Request struct {
 	Seq    uint64 `json:"seq,omitempty"`
 	Cmd    string `json:"cmd"`
-	Tab    int    `json:"id,omitempty"`
+	Tab    int    `json:"id"`
 	URL    string `json:"url,omitempty"`
 	Window int    `json:"window,omitempty"`
 }

@@ -1,4 +1,4 @@
-import json, struct, subprocess, sys, os, time, threading
+import json, socket, struct, subprocess, sys, os, time, threading
 rt = sys.argv[1]
 env = dict(os.environ, XDG_RUNTIME_DIR=rt)
 # Chrome passes the origin, not "host": the manifest cannot add arguments.
@@ -8,8 +8,17 @@ def read():
     return json.loads(p.stdout.read(n))
 def write(m):
     b = json.dumps(m).encode(); p.stdin.write(struct.pack("=I", len(b)) + b); p.stdin.flush()
+def fail(why):
+    print("FAIL:", why, flush=True); p.kill(); sys.exit(1)
+# The path appears at bind, before listen: wait until the host accepts.
 sock = os.path.join(rt, "chromectl.sock")
-while not os.path.exists(sock): time.sleep(0.01)
+for _ in range(500):
+    try:
+        with socket.socket(socket.AF_UNIX) as s: s.connect(sock)
+        break
+    except OSError: time.sleep(0.01)
+else: fail("the host never accepted on " + sock)
+served = []
 def extension():
     for _ in range(5):
         req = read()
@@ -20,12 +29,34 @@ def extension():
             write({"seq": req["seq"], "result": {"id": 5, "window": 1}})
         else:
             write({"seq": req["seq"], "error": "No tab with id: 99."})
-t = threading.Thread(target=extension); t.start()
-for args in (["list"], ["list", "--json"], ["open", "https://example.com", "1"], ["open", "--json", "https://example.com"], ["activate", "99"]):
-    r = subprocess.run(["./bin/chromectl"] + args, env=env, capture_output=True, text=True)
+        served.append(req)
+t = threading.Thread(target=extension, daemon=True); t.start()
+url = "https://github.com/pulls?q=is%3Aopen&sort=updated"
+listed = json.dumps([{"id": 4, "window": 1, "active": True, "title": "Pull requests", "url": url}], separators=(",", ":"))
+# Each case: the arguments, then the exit code, stdout and stderr the CLI must give.
+cases = (
+    (["list"], 0, "4\t1\t*\tPull requests\t" + url + "\n", ""),
+    (["list", "--json"], 0, listed + "\n", ""),
+    (["open", "https://example.com", "1"], 0, "5\t1\n", ""),
+    (["open", "--json", "https://example.com"], 0, '{"id":5,"window":1}\n', ""),
+    (["activate", "99"], 1, "", "chromectl: No tab with id: 99.\n"),
+)
+def cli(args):
+    try: return subprocess.run(["./bin/chromectl"] + args, env=env, capture_output=True, text=True, timeout=5)
+    except subprocess.TimeoutExpired: fail("chromectl %s did not answer in 5s" % " ".join(args))
+for args, code, out, err in cases:
+    r = cli(args)
     print("$ chromectl", *args, "->", r.returncode, repr(r.stdout), repr(r.stderr), flush=True)
-t.join()
-p.stdin.close(); p.wait(timeout=2)
+    if (r.returncode, r.stdout, r.stderr) != (code, out, err):
+        fail("want %d %r %r" % (code, out, err))
+t.join(timeout=5)
+if len(served) != 5: fail("the extension answered %d of five requests" % len(served))
+p.stdin.close()
+try: p.wait(timeout=2)
+except subprocess.TimeoutExpired: fail("the host did not exit 2s after its stdin closed")
 print("host exit:", p.returncode, flush=True)
-r = subprocess.run(["./bin/chromectl", "list"], env=env, capture_output=True, text=True)
+if p.returncode != 0: fail("the host exited %d" % p.returncode)
+r = cli(["list"])
 print("$ chromectl list, host gone ->", r.returncode, repr(r.stderr))
+if r.returncode != 1 or "no chromectl host is listening" not in r.stderr: fail("want ErrNoHost")
+print("PASS")

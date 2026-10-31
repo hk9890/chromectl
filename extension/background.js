@@ -41,13 +41,12 @@ const commands = {
 function connect() {
   const port = chrome.runtime.connectNative(HOST);
   port.onMessage.addListener(async (req) => {
-    const run = commands[req.cmd];
-    if (!run) {
+    if (!Object.hasOwn(commands, req.cmd)) {
       port.postMessage({ seq: req.seq, error: `unknown command ${req.cmd}` });
       return;
     }
     try {
-      port.postMessage({ seq: req.seq, result: await run(req) });
+      port.postMessage({ seq: req.seq, result: await commands[req.cmd](req) });
     } catch (e) {
       port.postMessage({ seq: req.seq, error: String(e?.message ?? e) });
     }
@@ -57,5 +56,9 @@ function connect() {
     setTimeout(connect, RECONNECT_MS);
   });
 }
+
+// Chrome starts an MV3 worker at browser start only for a worker that listens
+// for onStartup. The listener does nothing: starting the worker runs connect.
+chrome.runtime.onStartup.addListener(() => {});
 
 connect();
