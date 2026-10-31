@@ -17,13 +17,15 @@ first result that differs from its `cases`. Edit `extension()` and `cases`
 together to script a different answer.
 
 To drive by hand instead: start the host with `XDG_RUNTIME_DIR` set to a fresh
-directory so it cannot take the socket of a running Chrome's host, and use the
-same variable for the CLI.
+directory, so the CLI does not also reach the hosts of a running Chrome, and
+use the same variable for the CLI. Answer the host's first request, `identify`,
+with `{"profile": "<8 hex digits>"}`: it opens its socket only after that.
 
 ## Live: the user's Chrome
 
-The socket at `$XDG_RUNTIME_DIR/chromectl.sock` belongs to the host the user's
-Chrome started. A CLI call against it acts on the user's real tabs. `list` is
+The sockets in `$XDG_RUNTIME_DIR/chromectl/` belong to the hosts the user's
+browsers started, one per profile. A CLI call against them acts on the user's
+real tabs. `list` is
 harmless; `activate` and `open` change what the user sees; `close` is
 destructive. Confirm before any of the last three.
 

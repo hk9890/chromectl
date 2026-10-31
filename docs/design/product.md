@@ -14,8 +14,14 @@ a script needs to treat a page the way it treats an editor window.
 Chrome owns tab identity, and chromectl does not pretend otherwise.
 
 - A tab id is stable while the tab lives and gone after Chrome restarts.
-  chromectl exposes it as it is. It never invents a longer-lived handle,
-  because any it invented would have to be re-found by URL anyway.
+  chromectl prints it as `<profile>:<chrome id>`, for example `3f9a12bc:812`:
+  Chrome's number, and the profile that owns it, because two browsers can
+  hand out the same number. It never invents a longer-lived handle, because
+  any it invented would have to be re-found by URL anyway. A window id has the
+  same form.
+- Every profile of every browser that loads the extension is reachable at
+  once. `list` shows them all; an id names its own profile, so no command
+  needs a profile flag.
 - Finding a tab again is the caller's job: list, match on the URL, act on the
   id. The one consumer that exists, revier, already owns a matcher, and a
   second matcher inside chromectl would be a second opinion about what a match
@@ -35,8 +41,12 @@ Chrome did not say.
 
 `--json` on `list` and `open` prints the same fields as JSON, for a caller
 that cannot trust tab-separated text: a page title may itself contain a tab.
-`list` prints an array of `{id, window, active, title, url}`, `open` an object
-`{id, window}`. `activate` and `close` print nothing on success, so they take
+`list` prints an array of `{id, window, active, browser, profile, title, url}`,
+`open` an object `{id, window}`; ids are strings in both. The tab-separated
+`list` has the columns id, window, active, browser, title, url. `open` without
+a window id opens in the last focused window of the one profile that runs;
+with several profiles it needs a window id, and its error lists one per
+profile. `activate` and `close` print nothing on success, so they take
 no `--json`; errors stay plain text on stderr in both modes. Tab-separated stays
 the default so a shell pipe needs no `jq`. This follows wctl, whose listing
 commands take `--json` and whose action commands do not.
@@ -89,9 +99,13 @@ the DevTools protocol and a test profile, not to a user's daily browser.
 
 | Condition | Behaviour |
 |---|---|
-| Chrome is not running | No host listens on the socket, absent or left behind. The CLI names the three causes and exits 1. |
+| Chrome is not running | No host listens. The CLI names the three causes and exits 1. |
 | The extension is disabled or not loaded | Same as above; the host was never started. |
 | The host crashed | The extension reconnects after two seconds. A call in that window fails cleanly. |
-| Chrome exits mid-call | The pending call gets "chrome went away" and the host exits, leaving its socket file. |
-| The extension is reloaded | The next host takes the socket before the old one exits; the next call reaches it. |
-| A socket left by an exited or killed host | The next host removes it on start. |
+| Chrome exits mid-call | The pending call gets "chrome went away"; the host removes its socket and exits. |
+| The extension is reloaded | The next host starts before the old one exits; the CLI takes the later one. |
+| A socket left by a killed host | The CLI's connection is refused, and the CLI removes the file. |
+| One profile's host does not answer in 10 seconds | `list` prints the other profiles' tabs, warns, and exits 1. A command for that profile fails; Chrome may still carry it out. |
+| The binary was upgraded, the extension not yet reloaded | Every call to that profile answers "reload the chromectl extension". |
+| A profile directory was copied, with its profile id, into a second browser | The CLI refuses that profile's ids and names both browsers. |
+| `XDG_RUNTIME_DIR` is not set, as under cron | The CLI uses `/run/user/<uid>`, the directory a desktop session sets it to. Without that directory it exits 1. |

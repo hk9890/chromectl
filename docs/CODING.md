@@ -25,7 +25,8 @@ framing and Chrome drops the host. Log to stderr, via `log`, and nothing else.
 1. Add the async function to `commands` in `extension/background.js`.
 2. Add the fields it reads to `proto.Request`, flat, with the JSON name the
    extension reads.
-3. Add the `case` in `cmd/chromectl/main.go`.
+3. Add the `case` in `cmd/chromectl/main.go`. Read a tab or window id with
+   `parseID`, and route the call to the host it names with `hostFor`.
 4. Add a case to `internal/hostd/hostd_test.go` with the fake extension.
 
 The extension keeps the `tabs` and `nativeMessaging` permissions and no other.
@@ -36,5 +37,8 @@ A command that needs more is a different product.
 - The extension id `mpnpeobidlmllklmdpnkhhhblkbhpmcp` is derived from the
   `key` in `extension/manifest.json`. The `key` never changes; every installed
   native messaging manifest allows that id and nothing else.
-- Tab ids are Chrome's and reset on restart. chromectl exposes them as they
-  are; matching a tab by URL is the caller's job.
+- Tab and window ids are Chrome's numbers and reset on restart. The CLI prints
+  and reads them as `<profile>:<number>`; the host and the extension see only
+  the number. Matching a tab by URL is the caller's job.
+- A host's identity is its socket name, which `client.Hosts` parses. Change
+  the name in `internal/hostd` and `internal/client` together.

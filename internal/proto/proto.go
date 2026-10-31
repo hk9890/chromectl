@@ -32,6 +32,20 @@ type Tab struct {
 	URL    string `json:"url"`
 }
 
+// Identity is the result of the identify request the host sends the
+// extension when it starts: the profile's id, 8 hex digits.
+type Identity struct {
+	Profile string `json:"profile"`
+}
+
+// ChromeGone begins the error of a call the host could not finish because
+// Chrome closed its pipe.
+const ChromeGone = "chrome went away"
+
+// StaleExtension is the answer of a host whose extension is older than its
+// binary and does not know identify.
+const StaleExtension = "the chromectl extension is older than chromectl: reload it at chrome://extensions"
+
 // ExtensionID is fixed by the "key" field in extension/manifest.json.
 const ExtensionID = "mpnpeobidlmllklmdpnkhhhblkbhpmcp"
 

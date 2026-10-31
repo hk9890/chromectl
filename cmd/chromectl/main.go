@@ -6,14 +6,12 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -26,12 +24,15 @@ import (
 
 const usage = `usage: chromectl <command> [args]
 
-  list [--json]                every tab: id, window, active, title, url
-                               (tab-separated, or a JSON array)
+  list [--json]                every tab of every profile: id, window, active,
+                               browser, title, url (tab-separated, or a JSON array)
   activate <tab-id>            activate the tab and focus its window
   open [--json] <url> [window] open url in a new tab, in the given window or the
-                               last focused one; prints its id and window
+                               last focused one; prints its id and window. With
+                               several profiles, the window id is required
   close <tab-id>               close the tab
+
+  Tab and window ids are <profile>:<number>, as list prints them.
   install                      copy this binary and the extension to ~/.local/share/chromectl
                                and register that copy as the native messaging host
   version                      print the version
@@ -52,20 +53,17 @@ func main() {
 	var err error
 	switch cmd {
 	case "list":
-		err = list(args)
+		err = list(os.Stdout, args)
 	case "activate":
 		err = tabCommand("activate", args)
 	case "close":
 		err = tabCommand("close", args)
 	case "open":
-		err = open(args)
+		err = open(os.Stdout, args)
 	case "install":
 		err = install(args)
 	case "host":
-		// Without this, a write to Chrome's closed stdout kills the process
-		// before Run can tell its callers that Chrome went away.
-		signal.Ignore(syscall.SIGPIPE)
-		err = hostd.Run(os.Stdin, os.Stdout, client.SocketPath())
+		err = host()
 	case "version", "--version":
 		fmt.Printf("chromectl %s (%s, %s)\n", build.Version, build.Commit, build.Date)
 	case "-h", "--help", "help":
@@ -80,93 +78,18 @@ func main() {
 	}
 }
 
-func list(args []string) error {
-	fs := newFlagSet("list")
-	asJSON := fs.Bool("json", false, "print a JSON array")
-	_ = fs.Parse(args)
-	if fs.NArg() != 0 {
-		return fmt.Errorf("list takes no arguments")
-	}
-	tabs := []proto.Tab{}
-	if err := client.Call(client.SocketPath(), proto.Request{Cmd: "list"}, &tabs); err != nil {
-		return err
-	}
-	if *asJSON {
-		return printJSON(tabs)
-	}
-	for _, t := range tabs {
-		active := "-"
-		if t.Active {
-			active = "*"
-		}
-		fmt.Printf("%d\t%d\t%s\t%s\t%s\n", t.ID, t.Window, active, t.Title, t.URL)
-	}
-	return nil
-}
-
-// newFlagSet exits 2 on a bad flag, as main does for an unknown command, and
-// 0 on -h. Both print the usage once, to stderr.
-func newFlagSet(name string) *flag.FlagSet {
-	fs := flag.NewFlagSet(name, flag.ExitOnError)
-	fs.Usage = func() { _, _ = fmt.Fprint(fs.Output(), usage) }
-	return fs
-}
-
-// parseID reads a tab or window id. Chrome's ids start at 1, and the wire
-// omits a window of 0, which opens the tab in the last focused window.
-func parseID(kind, arg string) (int, error) {
-	id, err := strconv.Atoi(arg)
-	if err != nil || id < 1 {
-		return 0, fmt.Errorf("%s id %q is not a positive number", kind, arg)
-	}
-	return id, nil
-}
-
-func tabCommand(cmd string, args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("%s takes exactly one tab id", cmd)
-	}
-	id, err := parseID("tab", args[0])
+// host runs the native messaging host for the browser that started it, its
+// parent.
+func host() error {
+	// Without this, a write to Chrome's closed stdout kills the process
+	// before Run can tell its callers that Chrome went away.
+	signal.Ignore(syscall.SIGPIPE)
+	dir, err := client.SocketDir()
 	if err != nil {
 		return err
 	}
-	return client.Call(client.SocketPath(), proto.Request{Cmd: cmd, Tab: id}, nil)
-}
-
-func open(args []string) error {
-	fs := newFlagSet("open")
-	asJSON := fs.Bool("json", false, "print a JSON object")
-	_ = fs.Parse(args)
-	if fs.NArg() < 1 || fs.NArg() > 2 {
-		return fmt.Errorf("open takes a url and an optional window id")
-	}
-	req := proto.Request{Cmd: "open", URL: fs.Arg(0)}
-	if fs.NArg() == 2 {
-		w, err := parseID("window", fs.Arg(1))
-		if err != nil {
-			return err
-		}
-		req.Window = w
-	}
-	var opened proto.Tab
-	if err := client.Call(client.SocketPath(), req, &opened); err != nil {
-		return err
-	}
-	if *asJSON {
-		return printJSON(struct {
-			ID     int `json:"id"`
-			Window int `json:"window"`
-		}{opened.ID, opened.Window})
-	}
-	fmt.Printf("%d\t%d\n", opened.ID, opened.Window)
-	return nil
-}
-
-// printJSON writes v as one line of JSON. URLs keep their & < > as is.
-func printJSON(v any) error {
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetEscapeHTML(false)
-	return enc.Encode(v)
+	browser := os.Getppid()
+	return hostd.Run(os.Stdin, os.Stdout, dir, hostd.Browser(browser), browser)
 }
 
 // install copies this binary and the extension to one directory whose path
