@@ -64,12 +64,40 @@ func SocketName(profile, browser string, browserPID int, start int64) string {
 	return fmt.Sprintf("%s.%s.%d.%d.sock", profile, browser, browserPID, start)
 }
 
-var socketName = regexp.MustCompile(`^([0-9a-f]{8}|stale)\.([^.]+)\.([0-9]+)\.([0-9]+)\.sock$`)
+var socketName = regexp.MustCompile(`^(` + proto.ProfileID + `|stale)\.([^.]+)\.([0-9]+)\.([0-9]+)\.sock$`)
 
-// Hosts lists the hosts in dir. Of two hosts of one profile in one browser,
-// the old one of a reload, it keeps the later. A file it cannot parse is not
-// a host's.
+// Hosts lists the hosts in dir. It first removes every socket whose host is
+// dead, so a socket a killed host left cannot pass for a reload or a copied
+// profile. Of two live hosts of one profile in one browser, the old one of a
+// reload, it keeps the later. A file it cannot parse is not a host's.
 func Hosts(dir string) ([]Host, error) {
+	hosts, err := parseHosts(dir)
+	var live []Host
+	for _, h := range hosts {
+		if !dead(h.Path) {
+			live = append(live, h)
+		}
+	}
+	return newestPerBrowser(live), err
+}
+
+// dead reports whether the socket at path refuses a connection, and removes
+// it if so. A host renames its socket into place only once it listens, so a
+// refused socket is a dead host's, never a starting one's.
+func dead(path string) bool {
+	conn, err := net.Dial("unix", path)
+	if err == nil {
+		_ = conn.Close()
+		return false
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ENOENT) {
+		_ = os.Remove(path)
+		return true
+	}
+	return false
+}
+
+func parseHosts(dir string) ([]Host, error) {
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -91,7 +119,7 @@ func Hosts(dir string) ([]Host, error) {
 		h.Start, _ = strconv.ParseInt(m[4], 10, 64)
 		hosts = append(hosts, h)
 	}
-	return newestPerBrowser(hosts), nil
+	return hosts, nil
 }
 
 func newestPerBrowser(hosts []Host) []Host {
@@ -132,15 +160,15 @@ func newestPerBrowser(hosts []Host) []Host {
 
 // Call sends req to the host at socketPath and decodes the result into out,
 // which may be nil when the caller only needs success. A socket that refuses
-// the connection belongs to a host that is dead: a host renames its socket
-// into place only once it listens. Call removes it and returns ErrNoHost.
+// the connection belongs to a host that is dead: Call removes it and returns
+// ErrNoHost.
 func Call(socketPath string, req proto.Request, out any) error {
 	conn, err := net.Dial("unix", socketPath)
-	if errors.Is(err, syscall.ECONNREFUSED) {
-		_ = os.Remove(socketPath)
+	if err != nil && dead(socketPath) {
+		return ErrNoHost
 	}
 	if err != nil {
-		return ErrNoHost
+		return fmt.Errorf("connect to the chromectl host: %w", err)
 	}
 	defer func() { _ = conn.Close() }()
 	_ = conn.SetDeadline(time.Now().Add(callTimeout))

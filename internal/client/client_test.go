@@ -32,11 +32,35 @@ func touch(t *testing.T, dir string, names ...string) {
 	}
 }
 
+// listen puts a live host's socket at each name in dir.
+func listen(t *testing.T, dir string, names ...string) {
+	t.Helper()
+	for _, name := range names {
+		ln, err := net.Listen("unix", filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = ln.Close() })
+	}
+}
+
+// dead puts the socket a killed host leaves at name in dir.
+func deadSocket(t *testing.T, dir, name string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln.SetUnlinkOnClose(false)
+	_ = ln.Close()
+	return path
+}
+
 func TestHostsReadsEachSocketName(t *testing.T) {
 	dir := socketDir(t)
+	listen(t, dir, SocketName("0123abcd", "chrome", 10, 100), SocketName("", "brave", 20, 200))
 	touch(t, dir,
-		SocketName("0123abcd", "chrome", 10, 100),
-		SocketName("", "brave", 20, 200),
 		".0123abcd.chrome.10.300.sock", // a host not yet listening
 		"chromectl.sock",               // the single socket of earlier releases
 		"notes.txt",
@@ -58,7 +82,7 @@ func TestHostsReadsEachSocketName(t *testing.T) {
 // host.
 func TestHostsKeepsTheLaterHostOfAReload(t *testing.T) {
 	dir := socketDir(t)
-	touch(t, dir, SocketName("0123abcd", "chrome", 10, 900), SocketName("0123abcd", "chrome", 10, 100))
+	listen(t, dir, SocketName("0123abcd", "chrome", 10, 900), SocketName("0123abcd", "chrome", 10, 100))
 	hosts, _ := Hosts(dir)
 	if len(hosts) != 1 || hosts[0].Start != 900 || hosts[0].Conflict != "" {
 		t.Fatalf("Hosts = %+v", hosts)
@@ -69,7 +93,7 @@ func TestHostsKeepsTheLaterHostOfAReload(t *testing.T) {
 // cannot name one tab.
 func TestHostsMarksAProfileInTwoBrowsers(t *testing.T) {
 	dir := socketDir(t)
-	touch(t, dir, SocketName("0123abcd", "chrome", 10, 100), SocketName("0123abcd", "chromium", 20, 100))
+	listen(t, dir, SocketName("0123abcd", "chrome", 10, 100), SocketName("0123abcd", "chromium", 20, 100))
 	hosts, _ := Hosts(dir)
 	if len(hosts) != 2 {
 		t.Fatalf("Hosts = %+v", hosts)
@@ -78,6 +102,22 @@ func TestHostsMarksAProfileInTwoBrowsers(t *testing.T) {
 		if !strings.Contains(h.Conflict, "chrome (pid 10) and chromium (pid 20)") {
 			t.Errorf("Conflict = %q", h.Conflict)
 		}
+	}
+}
+
+// A killed host leaves its socket. After Chrome restarts, the same profile
+// runs under a new browser pid; the dead socket must not make that a copied
+// profile, nor stay.
+func TestHostsRemovesDeadSocketsFirst(t *testing.T) {
+	dir := socketDir(t)
+	dead := deadSocket(t, dir, SocketName("0123abcd", "chrome", 10, 100))
+	listen(t, dir, SocketName("0123abcd", "chrome", 20, 50))
+	hosts, _ := Hosts(dir)
+	if len(hosts) != 1 || hosts[0].BrowserPID != 20 || hosts[0].Conflict != "" {
+		t.Fatalf("Hosts = %+v", hosts)
+	}
+	if _, err := os.Stat(dead); !os.IsNotExist(err) {
+		t.Fatalf("the dead socket is still there: %v", err)
 	}
 }
 
@@ -90,14 +130,7 @@ func TestHostsWithoutTheDirectoryIsNone(t *testing.T) {
 
 // A visible socket always had a listener, so a refused one is a dead host's.
 func TestCallRemovesARefusedSocket(t *testing.T) {
-	path := filepath.Join(socketDir(t), SocketName("0123abcd", "chrome", 10, 100))
-	ln, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ln.SetUnlinkOnClose(false)
-	_ = ln.Close()
-
+	path := deadSocket(t, socketDir(t), SocketName("0123abcd", "chrome", 10, 100))
 	if err := Call(path, proto.Request{Cmd: "list"}, nil); err != ErrNoHost {
 		t.Fatalf("err = %v, want ErrNoHost", err)
 	}

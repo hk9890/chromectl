@@ -30,7 +30,9 @@ function profileId() {
         db.close();
         resolve(id);
       };
-      tx.onerror = () => reject(tx.error);
+      // A commit can fail with no request error, as on a full quota; only
+      // abort fires then, and the host would wait for ever.
+      tx.onabort = () => reject(tx.error ?? new Error("the profile id was not saved"));
     };
   });
 }

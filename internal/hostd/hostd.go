@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,17 +29,25 @@ import (
 // gone, so a caller that never reads cannot keep the host alive.
 const lastReplyWindow = time.Second
 
-var profileID = regexp.MustCompile(`^[0-9a-f]{8}$`)
+var profileID = regexp.MustCompile(`^` + proto.ProfileID + `$`)
+
+// Self is who a host is besides its profile: the browser that started it,
+// and when the host started, StartTime. The socket name carries all three.
+type Self struct {
+	Browser    string
+	BrowserPID int
+	Start      int64
+}
 
 // Run serves Chrome's pipe until fromChrome reaches EOF. It first asks the
 // extension for its profile id, then listens in dir at the name that tells
-// the CLI who it is, client.SocketName. An extension that cannot answer is
-// older than this binary; the host then listens as a stale host and answers
-// every call with proto.StaleExtension, because exiting would only make the
-// extension start it again. Run removes its socket when Chrome closes the
-// pipe, and returns once every call that reached Chrome has written its
-// reply, so the process does not exit under it.
-func Run(fromChrome io.Reader, toChrome io.Writer, dir, browser string, browserPID int) error {
+// the CLI who it is, client.SocketName. Where the extension cannot give the
+// id, the host listens as a stale host and answers every call with the
+// reason, because exiting would only make the extension start it again, and
+// the reason would reach only Chrome's stderr. Run removes its socket when
+// Chrome closes the pipe, and returns once every call that reached Chrome has
+// written its reply, so the process does not exit under it.
+func Run(fromChrome io.Reader, toChrome io.Writer, dir string, self Self) error {
 	h := &host{toChrome: toChrome, pending: map[uint64]chan proto.Reply{}, inFlight: map[net.Conn]struct{}{}}
 
 	readErr := make(chan error, 1)
@@ -50,22 +59,26 @@ func Run(fromChrome io.Reader, toChrome io.Writer, dir, browser string, browserP
 
 	var id proto.Identity
 	reply, _ := h.ask(nil, proto.Request{Cmd: "identify"})
-	h.mu.Lock()
-	gone := h.gone
-	h.mu.Unlock()
-	if gone != nil {
+	if strings.HasPrefix(reply.Error, proto.ChromeGone) {
 		return chromeEnded(<-readErr)
 	}
 	if reply.Error == "" {
 		_ = json.Unmarshal(reply.Result, &id)
 	}
-	if !profileID.MatchString(id.Profile) {
-		log.Printf("identify answered %q %s: %s", id.Profile, reply.Error, proto.StaleExtension)
-		h.stale = true
+	switch {
+	case strings.HasPrefix(reply.Error, "unknown command"):
+		h.stale = proto.StaleExtension
+	case reply.Error != "":
+		h.stale = "the chromectl extension could not give its profile id: " + reply.Error
+	case !profileID.MatchString(id.Profile):
+		h.stale = fmt.Sprintf("the chromectl extension gave the profile id %q, not 8 hex digits", id.Profile)
+	}
+	if h.stale != "" {
+		log.Print(h.stale)
 		id.Profile = ""
 	}
 
-	path, ln, err := listen(dir, client.SocketName(id.Profile, browser, browserPID, time.Now().UnixNano()))
+	path, ln, err := listen(dir, client.SocketName(id.Profile, self.Browser, self.BrowserPID, self.Start))
 	if err != nil {
 		return err
 	}
@@ -90,6 +103,23 @@ func Run(fromChrome io.Reader, toChrome io.Writer, dir, browser string, browserP
 	h.limitLastReplies()
 	h.inFlightDone.Wait()
 	return chromeEnded(<-readErr)
+}
+
+// StartTime is when this process started, in clock ticks since boot, from
+// /proc/self/stat. Unlike the wall clock, no clock step can make a later
+// host look older, so the CLI can trust it to pick the new host of a reload.
+func StartTime() (int64, error) {
+	stat, err := os.ReadFile("/proc/self/stat")
+	if err != nil {
+		return 0, err
+	}
+	// The command name, field 2, is in parentheses and may hold spaces;
+	// field 3 is the first after the last ')', and the start time is field 22.
+	fields := strings.Fields(string(stat[strings.LastIndexByte(string(stat), ')')+1:]))
+	if len(fields) < 20 {
+		return 0, fmt.Errorf("/proc/self/stat has %d fields after the name", len(fields))
+	}
+	return strconv.ParseInt(fields[19], 10, 64)
 }
 
 func chromeEnded(readErr error) error {
@@ -149,7 +179,7 @@ func browserName(exe string) string {
 
 type host struct {
 	toChrome     io.Writer
-	stale        bool
+	stale        string // why the host cannot serve, or ""
 	writeMu      sync.Mutex
 	mu           sync.Mutex
 	seq          uint64
@@ -229,8 +259,8 @@ func (h *host) serve(conn net.Conn) {
 		_ = json.NewEncoder(conn).Encode(proto.Reply{Error: "bad request: " + err.Error()})
 		return
 	}
-	if h.stale {
-		_ = json.NewEncoder(conn).Encode(proto.Reply{Error: proto.StaleExtension})
+	if h.stale != "" {
+		_ = json.NewEncoder(conn).Encode(proto.Reply{Error: h.stale})
 		return
 	}
 	reply, inFlight := h.ask(conn, req)
@@ -270,7 +300,7 @@ func (h *host) ask(conn net.Conn, req proto.Request) (reply proto.Reply, inFligh
 		h.mu.Lock()
 		delete(h.pending, req.Seq)
 		h.mu.Unlock()
-		return proto.Reply{Seq: req.Seq, Error: fmt.Sprintf("send to chrome: %v", err)}, inFlight
+		return goneReply(req.Seq, err), inFlight
 	}
 	return <-ch, inFlight
 }

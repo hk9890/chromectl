@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +17,10 @@ import (
 	"github.com/hk9890/chromectl/internal/native"
 	"github.com/hk9890/chromectl/internal/proto"
 )
+
+// starts gives each host a later start than the one before, as two host
+// processes have.
+var starts atomic.Int64
 
 // runtimeDir points XDG_RUNTIME_DIR at a fresh directory short enough for a
 // host's socket path, and returns the socket directory in it.
@@ -39,7 +44,9 @@ func startHost(t *testing.T, profile, browser string, browserPID int, tabs []pro
 	toHost, fromExt := io.Pipe()
 	fromHost, toExt := io.Pipe()
 	ran := make(chan error, 1)
-	go func() { ran <- hostd.Run(toHost, toExt, sockets, browser, browserPID) }()
+	go func() {
+		ran <- hostd.Run(toHost, toExt, sockets, hostd.Self{Browser: browser, BrowserPID: browserPID, Start: starts.Add(1)})
+	}()
 	go func() {
 		for {
 			var req proto.Request
@@ -170,8 +177,11 @@ func TestOpenWithSeveralProfilesNeedsAWindow(t *testing.T) {
 	startHost(t, "aaaa0001", "chrome", 1, []proto.Tab{{ID: 4, Window: 1}}, nil)
 	startHost(t, "bbbb0002", "brave", 2, []proto.Tab{{ID: 5, Window: 3}}, got)
 
+	startHost(t, "cccc0003", "chrome", 1, nil, nil)
 	err := open(io.Discard, []string{"https://example.com"})
-	if err == nil || !strings.Contains(err.Error(), "aaaa0001:1 (chrome), bbbb0002:3 (brave)") {
+	want := "several Chrome profiles run, so open needs a window id, one of aaaa0001:1 (chrome), bbbb0002:3 (brave)" +
+		"; without a window, and so out of reach of open: cccc0003 (chrome)"
+	if err == nil || err.Error() != want {
 		t.Fatalf("err = %v", err)
 	}
 	var out bytes.Buffer

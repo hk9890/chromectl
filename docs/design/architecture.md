@@ -56,25 +56,28 @@ the profile.
 `<dir>` is `$XDG_RUNTIME_DIR`, else `/run/user/<uid>` when it exists and
 belongs to the user. `<browser>` comes from the directory of the parent
 process's executable (`chrome`, `chrome-beta`, `chromium`, `brave`), and
-`<start>` is the host's start time in nanoseconds. So one read of the
+`<start>` is the host's start time in clock ticks since boot, which no clock
+step can turn back. So one read of the
 directory tells the CLI every host, its profile and its browser, and a
 command for one tab dials one socket.
 
 - The host binds and listens at a hidden temporary name, then renames the
   socket into place. A visible name always has a listener behind it, so a
-  refused connection means the host is dead, and the CLI deletes the file.
+  refused connection means the host is dead. The CLI tries each socket
+  before it reads anything into the names below, and deletes a refused one,
+  so a socket a killed host left cannot pass for a reload or a copy.
 - Two names with the same profile and the same browser pid are a reload: the
   old host still runs until Chrome closes its pipe. The CLI uses the later
   start.
 - The same profile under two browser pids is a profile directory copied with
   its IndexedDB. The CLI refuses that profile's ids and names both browsers.
-- A host whose extension answers `identify` with an error runs an extension
-  older than its binary: `chromectl install` replaced the binary, and the host
-  died before the user reloaded the extension. It listens at
-  `stale.<browser>.<browser pid>.<start>.sock` and answers every call with
-  "reload the chromectl extension". Exiting instead would start a loop: the
-  worker reconnects every two seconds, and the reason would reach only
-  Chrome's stderr.
+- A host whose extension cannot give its profile id listens at
+  `stale.<browser>.<browser pid>.<start>.sock` and answers every call with the
+  reason. An extension that does not know `identify` is older than its binary:
+  `chromectl install` replaced the binary, and the host died before the user
+  reloaded the extension; that reason is "reload the chromectl extension".
+  Exiting instead would start a loop: the worker reconnects every two seconds,
+  and the reason would reach only Chrome's stderr.
 
 **Fan-out.** `list` asks every host at once and prints what they answer. A
 call that gets no reply in 10 seconds fails; `list` then prints the other

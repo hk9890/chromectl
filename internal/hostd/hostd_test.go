@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,6 +20,10 @@ import (
 )
 
 const profile = "0123abcd"
+
+// starts gives each host a later start than the one before, as two host
+// processes have.
+var starts atomic.Int64
 
 // socketDir is a fresh directory short enough that a host's socket name fits
 // a Unix socket path; t.TempDir's is not.
@@ -71,7 +76,9 @@ func rawExtensionIn(t *testing.T, dir string, browserPID int, reply func(raw jso
 	before := sockets(dir)
 
 	ran := make(chan error, 1)
-	go func() { ran <- hostd.Run(toHost, toExt, dir, "chrome", browserPID) }()
+	go func() {
+		ran <- hostd.Run(toHost, toExt, dir, hostd.Self{Browser: "chrome", BrowserPID: browserPID, Start: starts.Add(1)})
+	}()
 	go func() {
 		for {
 			var raw json.RawMessage
@@ -182,6 +189,30 @@ func TestAnExtensionWithoutIdentifyGetsAStaleHost(t *testing.T) {
 	}
 	if err := client.Call(socket, proto.Request{Cmd: "list"}, nil); err == nil || err.Error() != proto.StaleExtension {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// An extension that knows identify but cannot answer it, as when IndexedDB
+// fails, is not out of date; the host passes the extension's reason on.
+func TestAFailedIdentifyGivesItsReason(t *testing.T) {
+	socket, done := rawExtensionIn(t, socketDir(t), 1, func(_ json.RawMessage, req proto.Request, toHost io.Writer) error {
+		return native.Write(toHost, map[string]any{"seq": req.Seq, "error": "UnknownError: Internal error opening backing store"})
+	})
+	defer done()
+
+	err := client.Call(socket, proto.Request{Cmd: "list"}, nil)
+	if err == nil || err.Error() != "the chromectl extension could not give its profile id: UnknownError: Internal error opening backing store" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestStartTimeIsThisProcesssStart(t *testing.T) {
+	first, err := hostd.StartTime()
+	if err != nil || first <= 0 {
+		t.Fatalf("StartTime = %d, %v", first, err)
+	}
+	if again, _ := hostd.StartTime(); again != first {
+		t.Fatalf("StartTime changed from %d to %d", first, again)
 	}
 }
 

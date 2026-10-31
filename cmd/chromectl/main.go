@@ -31,12 +31,12 @@ const usage = `usage: chromectl <command> [args]
                                last focused one; prints its id and window. With
                                several profiles, the window id is required
   close <tab-id>               close the tab
-
-  Tab and window ids are <profile>:<number>, as list prints them.
   install                      copy this binary and the extension to ~/.local/share/chromectl
                                and register that copy as the native messaging host
   version                      print the version
   host                         the native messaging host; Chrome starts this, not you
+
+Tab and window ids are <profile>:<number>, as list prints them.
 `
 
 func main() {
@@ -88,8 +88,12 @@ func host() error {
 	if err != nil {
 		return err
 	}
+	start, err := hostd.StartTime()
+	if err != nil {
+		return err
+	}
 	browser := os.Getppid()
-	return hostd.Run(os.Stdin, os.Stdout, dir, hostd.Browser(browser), browser)
+	return hostd.Run(os.Stdin, os.Stdout, dir, hostd.Self{Browser: hostd.Browser(browser), BrowserPID: browser, Start: start})
 }
 
 // install copies this binary and the extension to one directory whose path

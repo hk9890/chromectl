@@ -24,7 +24,7 @@ func newFlagSet(name string) *flag.FlagSet {
 	return fs
 }
 
-var compositeID = regexp.MustCompile(`^([0-9a-f]{8}):([0-9]+)$`)
+var compositeID = regexp.MustCompile(`^(` + proto.ProfileID + `):([0-9]+)$`)
 
 // parseID reads a tab or window id as list prints it: the profile that owns
 // it, a colon, and Chrome's number, which starts at 1.
@@ -61,20 +61,32 @@ func hostFor(hs []client.Host, profile string) (client.Host, error) {
 	if len(hs) == 0 {
 		return client.Host{}, client.ErrNoHost
 	}
-	for _, h := range hs {
-		if h.Profile == "" {
-			return client.Host{}, errors.New(proto.StaleExtension)
-		}
+	if err := staleReason(hs); err != nil {
+		return client.Host{}, err
 	}
-	return client.Host{}, fmt.Errorf("no chromectl host for profile %s: is that profile still open?", profile)
+	return client.Host{}, noHostFor(profile)
 }
 
-// callProfile sends req to the host of profile.
-func callProfile(profile string, req proto.Request, out any) error {
-	hs, err := hosts()
-	if err != nil {
-		return err
+// staleReason returns the answer of a stale host, which cannot serve and
+// cannot say which profile it is, so it may be the one the caller wants.
+func staleReason(hs []client.Host) error {
+	for _, h := range hs {
+		if h.Profile != "" {
+			continue
+		}
+		if err := client.Call(h.Path, proto.Request{Cmd: "list"}, nil); err != nil && !errors.Is(err, client.ErrNoHost) {
+			return err
+		}
 	}
+	return nil
+}
+
+func noHostFor(profile string) error {
+	return fmt.Errorf("no chromectl host for profile %s: is that profile still open?", profile)
+}
+
+// callProfile sends req to the host of profile among hs.
+func callProfile(hs []client.Host, profile string, req proto.Request, out any) error {
 	h, err := hostFor(hs, profile)
 	if err != nil {
 		return err
@@ -82,7 +94,7 @@ func callProfile(profile string, req proto.Request, out any) error {
 	if err := client.Call(h.Path, req, out); !errors.Is(err, client.ErrNoHost) {
 		return err
 	}
-	return fmt.Errorf("no chromectl host for profile %s: is that profile still open?", profile)
+	return noHostFor(profile)
 }
 
 func tabCommand(cmd string, args []string) error {
@@ -93,7 +105,11 @@ func tabCommand(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return callProfile(profile, proto.Request{Cmd: cmd, Tab: id}, nil)
+	hs, err := hosts()
+	if err != nil {
+		return err
+	}
+	return callProfile(hs, profile, proto.Request{Cmd: cmd, Tab: id}, nil)
 }
 
 // hostTabs is one host's answer to list.
@@ -189,7 +205,9 @@ func list(w io.Writer, args []string) error {
 			if r.Active {
 				active = "*"
 			}
-			_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, r.Window, active, r.Browser, r.Title, r.URL)
+			if _, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, r.Window, active, r.Browser, r.Title, r.URL); err != nil {
+				break
+			}
 		}
 	}
 	if err == nil && !complete {
@@ -213,15 +231,18 @@ func open(w io.Writer, args []string) error {
 			return err
 		}
 		profile, req.Window = p, window
-	} else {
-		p, err := onlyProfile()
-		if err != nil {
+	}
+	hs, err := hosts()
+	if err != nil {
+		return err
+	}
+	if profile == "" {
+		if profile, err = onlyProfile(hs); err != nil {
 			return err
 		}
-		profile = p
 	}
 	var opened proto.Tab
-	if err := callProfile(profile, req, &opened); err != nil {
+	if err := callProfile(hs, profile, req, &opened); err != nil {
 		return err
 	}
 	id, window := fmt.Sprintf("%s:%d", profile, opened.ID), fmt.Sprintf("%s:%d", profile, opened.Window)
@@ -231,18 +252,15 @@ func open(w io.Writer, args []string) error {
 			Window string `json:"window"`
 		}{id, window})
 	}
-	_, err := fmt.Fprintf(w, "%s\t%s\n", id, window)
+	_, err = fmt.Fprintf(w, "%s\t%s\n", id, window)
 	return err
 }
 
 // onlyProfile returns the profile open uses without a window id: the one
 // that runs. With several, it is an error that lists a window id of each, so
-// the caller can choose.
-func onlyProfile() (string, error) {
-	hs, err := hosts()
-	if err != nil {
-		return "", err
-	}
+// the caller can choose. It asks each for its tabs to learn a window id;
+// that costs a round trip only on the way to an error.
+func onlyProfile(hs []client.Host) (string, error) {
 	var live []client.Host
 	for _, h := range hs {
 		if h.Profile != "" && h.Conflict == "" {
@@ -258,8 +276,8 @@ func onlyProfile() (string, error) {
 				return "", errors.New(h.Conflict)
 			}
 		}
-		if len(hs) > 0 {
-			return "", errors.New(proto.StaleExtension)
+		if err := staleReason(hs); err != nil {
+			return "", err
 		}
 		return "", client.ErrNoHost
 	}
@@ -270,13 +288,22 @@ func onlyProfile() (string, error) {
 	if len(answers) == 0 && complete {
 		return "", client.ErrNoHost
 	}
-	var windows []string
+	var windows, windowless []string
 	for _, a := range answers {
 		if len(a.tabs) > 0 {
 			windows = append(windows, fmt.Sprintf("%s:%d (%s)", a.host.Profile, a.tabs[0].Window, a.host.Browser))
+		} else {
+			windowless = append(windowless, fmt.Sprintf("%s (%s)", a.host.Profile, a.host.Browser))
 		}
 	}
-	return "", fmt.Errorf("several Chrome profiles run: give open a window id, one of %s", strings.Join(windows, ", "))
+	msg := "several Chrome profiles run, so open needs a window id"
+	if len(windows) > 0 {
+		msg += ", one of " + strings.Join(windows, ", ")
+	}
+	if len(windowless) > 0 {
+		msg += "; without a window, and so out of reach of open: " + strings.Join(windowless, ", ")
+	}
+	return "", errors.New(msg)
 }
 
 // printJSON writes v as one line of JSON. URLs keep their & < > as is.
