@@ -145,7 +145,7 @@ const commands = {
     }));
   },
 
-  "activate-group"(req) {
+  async "activate-group"(req) {
     const raised = raising.then(() => raiseGroup(req));
     raising = raised.catch(() => {});
     return raised;

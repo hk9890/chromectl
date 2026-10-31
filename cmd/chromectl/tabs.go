@@ -389,7 +389,8 @@ func activateGroup(w io.Writer, args []string) error {
 		req.Window = 0
 	case profile != "":
 	case failed != nil:
-		return fmt.Errorf("no group titled %q among the hosts that answered, and one did not, so none is created: %w", req.Title, failed)
+		// The host that did not answer may hold the group, so none is created.
+		return incompleteError{"group search", failed}
 	case windowProfile != "":
 		profile = windowProfile
 	default:
@@ -503,7 +504,7 @@ func onlyProfile(hs []client.Host, cmd string) (string, error) {
 	if len(windowless) > 0 {
 		msg += "; without a window, and so out of reach of " + cmd + ": " + strings.Join(windowless, ", ")
 	}
-	return "", usageError{msg}
+	return "", badUsage("%s", msg)
 }
 
 // printJSON writes v as one line of JSON. URLs keep their & < > as is.
