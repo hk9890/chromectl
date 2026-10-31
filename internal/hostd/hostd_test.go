@@ -2,10 +2,12 @@ package hostd_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +29,17 @@ func fakeExtension(t *testing.T, answer func(proto.Request) proto.Reply) (socket
 // host's socket, and returns once this host accepts on it.
 func fakeExtensionAt(t *testing.T, socket string, answer func(proto.Request) proto.Reply) (done func()) {
 	t.Helper()
+	return rawExtensionAt(t, socket, func(req proto.Request, toHost io.Writer) error {
+		r := answer(req)
+		r.Seq = req.Seq
+		return native.Write(toHost, r)
+	})
+}
+
+// rawExtensionAt is fakeExtensionAt for an extension that writes its own
+// reply to the host's stdin, or none.
+func rawExtensionAt(t *testing.T, socket string, reply func(req proto.Request, toHost io.Writer) error) (done func()) {
+	t.Helper()
 	toHost, fromExt := io.Pipe()
 	fromHost, toExt := io.Pipe()
 	before, _ := os.Stat(socket)
@@ -39,9 +52,7 @@ func fakeExtensionAt(t *testing.T, socket string, answer func(proto.Request) pro
 			if err := native.Read(fromHost, &req); err != nil {
 				return
 			}
-			r := answer(req)
-			r.Seq = req.Seq
-			if err := native.Write(fromExt, r); err != nil {
+			if err := reply(req, fromExt); err != nil {
 				return
 			}
 		}
@@ -56,6 +67,7 @@ func fakeExtensionAt(t *testing.T, socket string, answer func(proto.Request) pro
 		if err := <-ran; err != nil {
 			t.Errorf("Run returned %v after Chrome closed the pipe", err)
 		}
+		_ = toExt.Close()
 	}
 }
 
@@ -94,6 +106,52 @@ func TestListReachesTheExtensionAndComesBack(t *testing.T) {
 	}
 }
 
+// The extension reads a request by the JSON names on the wire, so the test
+// reads the raw frame, not the decoded struct.
+func TestOpenSendsUrlAndWindow(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "s.sock")
+	got := make(chan string, 1)
+	done := rawExtensionAt(t, socket, func(req proto.Request, toHost io.Writer) error {
+		raw, _ := json.Marshal(req)
+		got <- string(raw)
+		return native.Write(toHost, map[string]any{"seq": req.Seq, "result": map[string]int{"id": 5, "window": 2}})
+	})
+	defer done()
+
+	var opened proto.Tab
+	if err := client.Call(socket, proto.Request{Cmd: "open", URL: "https://example.com", Window: 2}, &opened); err != nil {
+		t.Fatal(err)
+	}
+	var sent map[string]any
+	_ = json.Unmarshal([]byte(<-got), &sent)
+	if sent["cmd"] != "open" || sent["url"] != "https://example.com" || sent["window"] != float64(2) {
+		t.Fatalf("the extension received %v", sent)
+	}
+	if opened.ID != 5 || opened.Window != 2 {
+		t.Fatalf("opened = %+v", opened)
+	}
+}
+
+func TestCloseSendsTheTabId(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "s.sock")
+	got := make(chan string, 1)
+	done := rawExtensionAt(t, socket, func(req proto.Request, toHost io.Writer) error {
+		raw, _ := json.Marshal(req)
+		got <- string(raw)
+		return native.Write(toHost, map[string]any{"seq": req.Seq, "result": map[string]any{}})
+	})
+	defer done()
+
+	if err := client.Call(socket, proto.Request{Cmd: "close", Tab: 7}, nil); err != nil {
+		t.Fatal(err)
+	}
+	var sent map[string]any
+	_ = json.Unmarshal([]byte(<-got), &sent)
+	if sent["cmd"] != "close" || sent["id"] != float64(7) {
+		t.Fatalf("the extension received %v", sent)
+	}
+}
+
 func TestTheExtensionsErrorIsTheCallersError(t *testing.T) {
 	socket, done := fakeExtension(t, func(req proto.Request) proto.Reply {
 		return proto.Reply{Error: "No tab with id: 99."}
@@ -102,6 +160,45 @@ func TestTheExtensionsErrorIsTheCallersError(t *testing.T) {
 
 	err := client.Call(socket, proto.Request{Cmd: "activate", Tab: 99}, nil)
 	if err == nil || err.Error() != "No tab with id: 99." {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// One reply the host cannot decode fails its own call, not the host.
+func TestABadReplyFailsOnlyItsCall(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "s.sock")
+	done := rawExtensionAt(t, socket, func(req proto.Request, toHost io.Writer) error {
+		if req.Tab == 1 {
+			return native.Write(toHost, map[string]any{"seq": req.Seq, "error": 5})
+		}
+		return native.Write(toHost, map[string]any{"seq": req.Seq, "result": map[string]int{"id": req.Tab}})
+	})
+	defer done()
+
+	err := client.Call(socket, proto.Request{Cmd: "activate", Tab: 1}, nil)
+	if err == nil || !strings.HasPrefix(err.Error(), "bad reply from the extension: ") {
+		t.Fatalf("the bad reply gave %v", err)
+	}
+	if err := client.Call(socket, proto.Request{Cmd: "activate", Tab: 2}, nil); err != nil {
+		t.Fatalf("the next call gave %v", err)
+	}
+}
+
+// A call that is pending when Chrome closes the pipe gets its answer before
+// Run returns, and so before the host process exits.
+func TestAPendingCallHearsThatChromeWentAway(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "s.sock")
+	asked := make(chan struct{})
+	done := rawExtensionAt(t, socket, func(proto.Request, io.Writer) error {
+		close(asked)
+		return nil
+	})
+
+	errs := make(chan error, 1)
+	go func() { errs <- client.Call(socket, proto.Request{Cmd: "list"}, nil) }()
+	<-asked
+	done()
+	if err := <-errs; err == nil || err.Error() != "chrome went away: EOF" {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -119,7 +216,7 @@ func TestConcurrentCallsAreCorrelatedBySeq(t *testing.T) {
 			var got proto.Tab
 			err := client.Call(socket, proto.Request{Cmd: "activate", Tab: id}, &got)
 			if err == nil && got.ID != id {
-				err = &mismatch{want: id, got: got.ID}
+				err = fmt.Errorf("asked for tab %d, got %d", id, got.ID)
 			}
 			errs <- err
 		}(i)
@@ -130,11 +227,6 @@ func TestConcurrentCallsAreCorrelatedBySeq(t *testing.T) {
 		}
 	}
 }
-
-type mismatch struct{ want, got int }
-
-func (m *mismatch) Error() string { return "asked for tab " + itoa(m.want) + ", got " + itoa(m.got) }
-func itoa(i int) string           { b, _ := json.Marshal(i); return string(b) }
 
 func TestWithoutAHostTheClientSaysSo(t *testing.T) {
 	err := client.Call(filepath.Join(t.TempDir(), "absent.sock"), proto.Request{Cmd: "list"}, nil)

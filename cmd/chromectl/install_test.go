@@ -89,7 +89,7 @@ func TestInstallRunTwiceReplacesTheCopy(t *testing.T) {
 	if _, err := os.Stat(stale); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("a file the embedded extension does not have survived the second install: %v", err)
 	}
-	leftovers, _ := filepath.Glob(filepath.Join(dir, ".chromectl-*"))
+	leftovers, _ := filepath.Glob(filepath.Join(dir, ".*"))
 	if len(leftovers) != 0 {
 		t.Errorf("temporary files left behind: %v", leftovers)
 	}

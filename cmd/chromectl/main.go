@@ -5,14 +5,17 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/hk9890/chromectl"
 	"github.com/hk9890/chromectl/internal/build"
@@ -59,6 +62,9 @@ func main() {
 	case "install":
 		err = install(args)
 	case "host":
+		// Without this, a write to Chrome's closed stdout kills the process
+		// before Run can tell its callers that Chrome went away.
+		signal.Ignore(syscall.SIGPIPE)
 		err = hostd.Run(os.Stdin, os.Stdout, client.SocketPath())
 	case "version", "--version":
 		fmt.Printf("chromectl %s (%s, %s)\n", build.Version, build.Commit, build.Date)
@@ -75,11 +81,9 @@ func main() {
 }
 
 func list(args []string) error {
-	fs := flag.NewFlagSet("list", flag.ContinueOnError)
+	fs := newFlagSet("list")
 	asJSON := fs.Bool("json", false, "print a JSON array")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
+	_ = fs.Parse(args)
 	if fs.NArg() != 0 {
 		return fmt.Errorf("list takes no arguments")
 	}
@@ -100,31 +104,47 @@ func list(args []string) error {
 	return nil
 }
 
+// newFlagSet exits 2 on a bad flag and 0 on -h, as main does for an unknown
+// command and for help, and prints the usage once.
+func newFlagSet(name string) *flag.FlagSet {
+	fs := flag.NewFlagSet(name, flag.ExitOnError)
+	fs.Usage = func() { _, _ = fmt.Fprint(fs.Output(), usage) }
+	return fs
+}
+
+// parseID reads a tab or window id. Chrome's ids start at 1, and the wire
+// omits a 0, which Chrome reads as "the current tab".
+func parseID(kind, arg string) (int, error) {
+	id, err := strconv.Atoi(arg)
+	if err != nil || id < 1 {
+		return 0, fmt.Errorf("%s id %q is not a positive number", kind, arg)
+	}
+	return id, nil
+}
+
 func tabCommand(cmd string, args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("%s takes exactly one tab id", cmd)
 	}
-	id, err := strconv.Atoi(args[0])
+	id, err := parseID("tab", args[0])
 	if err != nil {
-		return fmt.Errorf("tab id %q is not a number", args[0])
+		return err
 	}
 	return client.Call(client.SocketPath(), proto.Request{Cmd: cmd, Tab: id}, nil)
 }
 
 func open(args []string) error {
-	fs := flag.NewFlagSet("open", flag.ContinueOnError)
+	fs := newFlagSet("open")
 	asJSON := fs.Bool("json", false, "print a JSON object")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
+	_ = fs.Parse(args)
 	if fs.NArg() < 1 || fs.NArg() > 2 {
 		return fmt.Errorf("open takes a url and an optional window id")
 	}
 	req := proto.Request{Cmd: "open", URL: fs.Arg(0)}
 	if fs.NArg() == 2 {
-		w, err := strconv.Atoi(fs.Arg(1))
+		w, err := parseID("window", fs.Arg(1))
 		if err != nil {
-			return fmt.Errorf("window id %q is not a number", fs.Arg(1))
+			return err
 		}
 		req.Window = w
 	}
@@ -262,14 +282,31 @@ func copySelf(dst string) error {
 }
 
 // writeExtension replaces dir with the embedded extension, so no file a
-// previous version had is left behind.
+// previous version had is left behind. It writes a sibling directory first
+// and renames it into place, because Chrome loads the extension from dir and
+// must not find it half written.
 func writeExtension(dir string) error {
 	ext, err := fs.Sub(chromectl.Extension, "extension")
 	if err != nil {
 		return err
 	}
-	if err := os.RemoveAll(dir); err != nil {
+	tmp, err := os.MkdirTemp(filepath.Dir(dir), ".extension-*")
+	if err != nil {
 		return err
 	}
-	return os.CopyFS(dir, ext)
+	defer func() { _ = os.RemoveAll(tmp) }()
+	if err := os.CopyFS(tmp, ext); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0o755); err != nil {
+		return err
+	}
+	old := tmp + ".old"
+	if err := os.Rename(dir, old); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if err := os.Rename(tmp, dir); err != nil {
+		return err
+	}
+	return os.RemoveAll(old)
 }

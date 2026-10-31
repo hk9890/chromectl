@@ -47,11 +47,13 @@ and the socket's lifetime is the simplest possible timeout. The host assigns
 
 - One goroutine reads replies from Chrome and delivers each to the channel
   registered under its `seq`. A reply for an unknown `seq` is logged and
-  dropped.
+  dropped. A reply that does not decode fails only the call it answers.
 - Every socket connection is its own goroutine: decode, register, write to
   Chrome under one mutex, wait on its channel, encode.
 - When the pipe closes, every pending channel receives "chrome went away",
-  the listener closes, and `Run` returns.
+  the listener closes, and `Run` returns once each accepted connection has
+  its reply. The process exits with `Run`, so a reply not yet written then
+  would be lost.
 
 ## Rejected alternatives
 

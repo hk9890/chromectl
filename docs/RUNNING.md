@@ -12,8 +12,9 @@ mise run drive
 `scripts/fakechrome.py` starts `./bin/chromectl` on pipes with the arguments Chrome passes, plays the
 extension, and runs `list`, `open` and `activate` through the CLI. It prints
 every request the host forwarded and every CLI result, then closes the pipe and
-reports the host's exit and that `list` then finds no host. Edit its `extension()`
-function to script a different answer.
+reports the host's exit and that `list` then finds no host. It exits 1 on the
+first result that differs from its `cases`. Edit `extension()` and `cases`
+together to script a different answer.
 
 To drive by hand instead: start the host with `XDG_RUNTIME_DIR` set to a fresh
 directory so it cannot take the socket of a running Chrome's host, and use the
