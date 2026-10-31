@@ -31,60 +31,40 @@ Chrome starts a fresh one.
 
 ## One host per profile
 
-Every profile that loads the extension has its own worker, and every worker
-starts its own host. Chrome, Chromium and Brave can run at once, each with
-several profiles. So several hosts run at once, and the CLI must know which
-one owns a tab.
+Every profile that loads the extension starts its own host, and Chrome,
+Chromium and Brave can run at once. So several hosts run at once, and the CLI
+must know which one owns a tab.
 
-**The profile id.** No API tells the extension or the host which profile it
-serves without a new permission. The extension makes one: 8 random hex digits,
-kept in IndexedDB, which every profile has apart and which clearing browsing
-data does not touch for an extension. The host asks for it with the request
-`identify` before it opens its socket.
+**The profile id.** No API names the profile without a new permission, so the
+extension makes a random id once and keeps it in IndexedDB: each profile has
+its own, and clearing browsing data does not touch it. The host asks for it
+with `identify` before it listens.
 
-**Ids.** A tab or window id is `<profile>:<chrome id>`, for example
-`3f9a12bc:812`. Chrome's tab and window ids come from one counter per browser
-process, so they are unique across the profiles of one browser, but two
-browsers can hand out the same number. The profile part makes the id unique
-across all of them, and it is always printed and read in full: a shortened
-form would mean one thing while some profiles run and another after one stops.
-The host and the extension see only Chrome's number; the CLI adds and strips
-the profile.
+**Ids.** A tab or window id is `<profile>:<chrome id>`. Chrome's numbers are
+unique in one browser process only; the profile part makes them unique across
+browsers. An id is always printed and read in full: a shortened form would
+change its meaning when a profile starts or stops. Only the CLI adds and
+strips the profile.
 
-**The socket name is the host's identity.** Each host listens at
-`<dir>/chromectl/<profile>.<browser>.<browser pid>.<start>.sock`, where
-`<dir>` is `$XDG_RUNTIME_DIR`, else `/run/user/<uid>` when it exists and
-belongs to the user. `<browser>` comes from the directory of the parent
-process's executable (`chrome`, `chrome-beta`, `chromium`, `brave`), and
-`<start>` is the host's start time in clock ticks since boot, which no clock
-step can turn back. So one read of the
-directory tells the CLI every host, its profile and its browser, and a
-command for one tab dials one socket.
+**The socket name is the host's identity.** Each host has its own socket in
+the user's runtime directory, and its name carries the profile, the browser,
+the browser's pid and the host's start time. One read of the directory finds
+every host, with no registry to keep in step.
 
-- The host binds and listens at a hidden temporary name, then renames the
-  socket into place. A visible name always has a listener behind it, so a
-  refused connection means the host is dead. The CLI tries each socket
-  before it reads anything into the names below, and deletes a refused one,
-  so a socket a killed host left cannot pass for a reload or a copy.
-- Two names with the same profile and the same browser pid are a reload: the
-  old host still runs until Chrome closes its pipe. The CLI uses the later
-  start.
-- The same profile under two browser pids is a profile directory copied with
-  its IndexedDB. The CLI refuses that profile's ids and names both browsers.
-- A host whose extension cannot give its profile id listens at
-  `stale.<browser>.<browser pid>.<start>.sock` and answers every call with the
-  reason. An extension that does not know `identify` is older than its binary:
-  `chromectl install` replaced the binary, and the host died before the user
-  reloaded the extension; that reason is "reload the chromectl extension".
-  Exiting instead would start a loop: the worker reconnects every two seconds,
+- A socket name appears only once a host listens behind it, so a refused
+  connection means a dead host. The CLI removes such a socket before it reads
+  the names.
+- The same profile under one browser pid twice is a reload: the later start
+  wins.
+- The same profile under two browser pids is a copied profile: the CLI refuses
+  its ids.
+- A host whose extension cannot give its id stays up as a stale host and
+  answers every call with the reason. Exiting would start a reconnect loop,
   and the reason would reach only Chrome's stderr.
 
-**Fan-out.** `list` asks every host at once and prints what they answer. A
-call that gets no reply in 10 seconds fails; `list` then prints the other
-hosts' tabs, a warning per host, and exits 1, so a script can tell the list is
-incomplete. A host that answers "chrome went away" is shutting down, and is
-skipped like a dead one. The limit is the CLI's alone: a call that timed out
-may still be carried out by Chrome.
+**Fan-out.** `list` asks every host at once. Each call has a time limit, which
+is the CLI's alone: Chrome may still carry out a call that timed out. `list`
+prints what answered, warns for each host that did not, and exits 1.
 
 ## Two protocols
 
@@ -130,8 +110,8 @@ The host assigns `seq`; the CLI never sees it.
 | `cmd/chromectl/` | The CLI, `install`, `version`, and the `host` entry. |
 | `internal/proto/` | The one message shape both protocols carry, and the two constants the manifest and the extension must agree on. |
 | `internal/native/` | Chrome's framing. |
-| `internal/hostd/` | The relay. |
-| `internal/client/` | The CLI's side of the socket, and where the socket lives. |
+| `internal/hostd/` | The relay, and the socket it listens at. |
+| `internal/client/` | The CLI's side: finding the hosts, and calling one. |
 | `internal/build/` | The version the build stamps in. |
 
 ## Consumers

@@ -13,12 +13,10 @@ a script needs to treat a page the way it treats an editor window.
 
 Chrome owns tab identity, and chromectl does not pretend otherwise.
 
-- A tab id is stable while the tab lives and gone after Chrome restarts.
-  chromectl prints it as `<profile>:<chrome id>`, for example `3f9a12bc:812`:
-  Chrome's number, and the profile that owns it, because two browsers can
-  hand out the same number. It never invents a longer-lived handle, because
-  any it invented would have to be re-found by URL anyway. A window id has the
-  same form.
+- A tab id is Chrome's, plus the profile that owns it, for example
+  `3f9a12bc:812`. It is stable while the tab lives and gone after Chrome
+  restarts. chromectl never invents a longer-lived handle, because any it
+  invented would have to be re-found by URL anyway.
 - Every profile of every browser that loads the extension is reachable at
   once. `list` shows them all; an id names its own profile, so no command
   needs a profile flag.
@@ -41,15 +39,12 @@ Chrome did not say.
 
 `--json` on `list` and `open` prints the same fields as JSON, for a caller
 that cannot trust tab-separated text: a page title may itself contain a tab.
-`list` prints an array of `{id, window, active, browser, profile, title, url}`,
-`open` an object `{id, window}`; ids are strings in both. The tab-separated
-`list` has the columns id, window, active, browser, title, url. `open` without
-a window id opens in the last focused window of the one profile that runs;
-with several profiles it needs a window id, and its error lists one per
-profile. `activate` and `close` print nothing on success, so they take
-no `--json`; errors stay plain text on stderr in both modes. Tab-separated stays
-the default so a shell pipe needs no `jq`. This follows wctl, whose listing
-commands take `--json` and whose action commands do not.
+`activate` and `close` print nothing on success, so they take no `--json`.
+Tab-separated stays the default so a shell pipe needs no `jq`. This follows
+wctl, whose listing commands take `--json` and whose action commands do not.
+
+`open` without a window id works only while one profile runs; with several,
+the caller names the window, and so the profile.
 
 ## Install
 
@@ -102,10 +97,10 @@ the DevTools protocol and a test profile, not to a user's daily browser.
 | Chrome is not running | No host listens. The CLI names the three causes and exits 1. |
 | The extension is disabled or not loaded | Same as above; the host was never started. |
 | The host crashed | The extension reconnects after two seconds. A call in that window fails cleanly. |
-| Chrome exits mid-call | The pending call gets "chrome went away"; the host removes its socket and exits. |
-| The extension is reloaded | The next host starts before the old one exits; the CLI takes the later one. |
-| A socket left by a killed host | The CLI's connection is refused, and the CLI removes the file. |
-| One profile's host does not answer in 10 seconds | `list` prints the other profiles' tabs, warns, and exits 1. A command for that profile fails; Chrome may still carry it out. |
+| Chrome exits mid-call | The pending call gets "chrome went away". |
+| The extension is reloaded | The CLI uses the new host. |
+| One profile's host does not answer in time | `list` prints the other profiles' tabs, warns, and exits 1. |
 | The binary was upgraded, the extension not yet reloaded | Every call to that profile answers "reload the chromectl extension". |
-| A profile directory was copied, with its profile id, into a second browser | The CLI refuses that profile's ids and names both browsers. |
-| `XDG_RUNTIME_DIR` is not set, as under cron | The CLI uses `/run/user/<uid>`, the directory a desktop session sets it to. Without that directory it exits 1. |
+| A profile was copied into a second browser | The CLI refuses that profile's ids and names both browsers. |
+| A profile was copied inside one browser | Known limit: the CLI reads it as a reload and shows only one of the two. |
+| No runtime directory, as in a session without logind | Known limit: the host cannot start, and the CLI reports no host. |
