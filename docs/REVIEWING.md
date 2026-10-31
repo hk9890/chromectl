@@ -12,7 +12,9 @@ Each rule is a condition to check on the diff, with the correct form.
   `No tab with id: 99.` reaches the CLI as-is with exit code 1. Flag a wrap or a
   reword of `reply.Error` between the extension and the caller; the correct form is
   `errors.New(reply.Error)`, as in `client.Call`. The `chromectl:` prefix that
-  `main` prints before each error is the CLI's own and is no finding.
+  `main` prints before each error is the CLI's own and is no finding, and so
+  are the browser and profile `list` prints before one host's error, because
+  it asks several; the text after them stays Chrome's.
 - **Sentinel errors**: `client.ErrNoHost` is the one sentinel: the socket is absent.
   Flag a second package-level error variable; the correct form is an error made
   where it occurs, as `fmt.Errorf("read reply: %w", err)` in `client.Call`.

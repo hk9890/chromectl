@@ -15,33 +15,72 @@ Every structural choice below follows from this one fact.
 
 ```
 chromectl list ──unix socket──▶ chromectl host ◀──stdin/stdout──▶ extension ──▶ chrome.tabs
-                $XDG_RUNTIME_DIR/chromectl.sock   native messaging
+                $XDG_RUNTIME_DIR/chromectl/       native messaging
+                one socket per host
 ```
 
 | Process | Started by | Lives until | Holds |
 |---|---|---|---|
-| Extension service worker | Chrome, on browser start | Chrome exits. An open native port keeps an MV3 worker alive, so no keepalive tick is needed. | The one port to the host |
-| `chromectl host` | Chrome, when the worker connects | Chrome closes the pipe. Exits and leaves its socket file: a reload starts the next host first, and the path may already be that host's. | The socket listener, the pending map |
-| `chromectl <cmd>` | The user or a caller | One reply | Nothing |
+| Extension service worker | Chrome, on profile start: the worker listens for `runtime.onStartup`, and Chrome starts an MV3 worker at browser start only for a worker that does | Chrome exits. An open native port keeps an MV3 worker alive, so no keepalive tick is needed. | The one port to the host, and the profile id |
+| `chromectl host` | Chrome, when the worker connects | Chrome closes the pipe. It removes its socket at that moment, then has one second to write the last replies. | The socket listener, the pending map, its profile id |
+| `chromectl <cmd>` | The user or a caller | One reply from each host it asks | Nothing |
 
 The host is a child of Chrome in the same sense as a renderer: the user never
 starts or stops it. If it dies, the worker reconnects after two seconds and
 Chrome starts a fresh one.
 
+## One host per profile
+
+Every profile that loads the extension starts its own host, and Chrome,
+Chromium and Brave can run at once. So several hosts run at once, and the CLI
+must know which one owns a tab.
+
+**The profile id.** No API names the profile without a new permission, so the
+extension makes a random id once and keeps it in IndexedDB: each profile has
+its own, and clearing browsing data does not touch it. The host asks for it
+with `identify` before it listens.
+
+**Ids.** A tab or window id is `<profile>:<chrome id>`. Chrome's numbers are
+unique in one browser process only; the profile part makes them unique across
+browsers. An id is always printed and read in full: a shortened form would
+change its meaning when a profile starts or stops. Only the CLI adds and
+strips the profile.
+
+**The socket name is the host's identity.** Each host has its own socket in
+the user's runtime directory, and its name carries the profile, the browser,
+the browser's pid and the host's start time. One read of the directory finds
+every host, with no registry to keep in step.
+
+- A socket name appears only once a host listens behind it, so a refused
+  connection means a dead host. The CLI removes such a socket before it reads
+  the names.
+- The same profile under one browser pid twice is a reload: the later start
+  wins.
+- The same profile under two browser pids is a copied profile: the CLI refuses
+  its ids.
+- A host whose extension cannot give its id stays up as a stale host and
+  answers every call with the reason. Exiting would start a reconnect loop,
+  and the reason would reach only Chrome's stderr.
+
+**Fan-out.** `list` asks every host at once. Each call has a time limit, which
+is the CLI's alone: Chrome may still carry out a call that timed out. `list`
+prints what answered, warns for each host that did not, and exits 1.
+
 ## Two protocols
 
 **Host to extension** is Chrome's native messaging: a 4-byte native-endian
 length, then JSON, at most 1 MB from the host. Every message from the host is a
-request `{seq, cmd, id?, url?, window?}`; every reply is `{seq, result}` or
+request `{seq, cmd, id, url?, window?}`; every reply is `{seq, result}` or
 `{seq, error}`. `seq` is the host's correlation number and `id` is a tab id;
 they are separate fields because the extension reads the request's fields as
 the arguments of the tabs API call, and a tab id named anything but `id` would
-be a translation layer for no gain.
+be a translation layer for no gain. `id` is always sent: Chrome reads a
+missing tab id as the current tab. The host sends one request of its own,
+`identify`, answered with `{profile}`.
 
 **CLI to host** is one JSON line each way over a Unix socket, then close. A
-request-reply socket rather than a stream, because a CLI call is one question
-and the socket's lifetime is the simplest possible timeout. The host assigns
-`seq`; the CLI never sees it.
+request-reply socket rather than a stream, because a CLI call is one question.
+The host assigns `seq`; the CLI never sees it.
 
 ## Concurrency in the host
 
@@ -53,40 +92,14 @@ and the socket's lifetime is the simplest possible timeout. The host assigns
 - Every socket connection is its own goroutine: decode, register, write to
   Chrome under one mutex, wait on its channel, encode.
 - When the pipe closes, every pending channel receives "chrome went away",
-  the listener closes, and `Run` returns once each call that reached Chrome
+  the socket file is removed, the listener closes, and `Run` returns once each call that reached Chrome
   has written its reply, or has had one second to. The process exits with
   `Run`, so a reply not yet written would be lost, and a caller that never
   reads must not hold the process.
 
 ## Rejected alternatives
 
-Each of these would otherwise be proposed again.
-
-**The WebSocket inversion.** The extension connects to a localhost server that
-the first CLI call starts. It matches the wish for "nothing runs until someone
-needs it", but an MV3 worker is asleep between events and its alarms cannot
-fire more often than every 30 seconds, so a cold call waits up to 30 seconds
-for the extension to notice the server. A run-or-raise keypress cannot carry
-that hole. Native messaging has no hole, because Chrome starts the host when
-the browser starts.
-
-**The DevTools protocol.** `--remote-debugging-port` can list and activate
-tabs without an extension. Since Chrome 136 the flag is ignored on the default
-user data directory, so it works only for a separate profile with its own
-logins, which is not the user's daily browser.
-
-**brotab as a dependency.** A working extension plus native host with the same
-shape. Rejected because its extension is Manifest V2, which Chrome is retiring,
-and asks for `<all_urls>` and script execution for features chromectl does not
-want to carry. The cost of owning sixty lines of extension is lower than the
-cost of depending on those.
-
-**The manifest names the running binary.** No copy and no embedded extension:
-the manifest points at whatever binary ran `install`, and the user loads
-`extension/` from where it lies. A release installed by mise lives in a
-directory named after its version, so after an upgrade the manifest would keep
-starting the old version, and an extension loaded from it would vanish with the
-old version's directory. `install` copies both to one fixed directory instead.
+[decisions.md](decisions.md) holds them, and the designs this one replaced.
 
 ## Layout
 
@@ -97,8 +110,8 @@ old version's directory. `install` copies both to one fixed directory instead.
 | `cmd/chromectl/` | The CLI, `install`, `version`, and the `host` entry. |
 | `internal/proto/` | The one message shape both protocols carry, and the two constants the manifest and the extension must agree on. |
 | `internal/native/` | Chrome's framing. |
-| `internal/hostd/` | The relay. |
-| `internal/client/` | The CLI's side of the socket, and where the socket lives. |
+| `internal/hostd/` | The relay, and the socket it listens at. |
+| `internal/client/` | The CLI's side: finding the hosts, and calling one. |
 | `internal/build/` | The version the build stamps in. |
 
 ## Consumers

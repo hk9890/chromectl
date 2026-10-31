@@ -9,7 +9,8 @@ the CLI talks to the host Chrome already started, never to Chrome.
 
 ```
 chromectl list ──unix socket──▶ chromectl host ◀──stdin/stdout──▶ extension ──▶ chrome.tabs
-                $XDG_RUNTIME_DIR/chromectl.sock   native messaging
+                $XDG_RUNTIME_DIR/chromectl/       native messaging
+                one socket per profile
 ```
 
 ## Layout
@@ -17,11 +18,11 @@ chromectl list ──unix socket──▶ chromectl host ◀──stdin/stdout�
 | Path | Holds |
 |---|---|
 | `embed.go` | Embeds `extension/` into the binary, for `install` to write out. |
-| `cmd/chromectl/` | The CLI, the `install` and `version` commands, and the `host` entry. |
+| `cmd/chromectl/` | The CLI (`tabs.go`: the tab commands, composite ids, routing to a profile's host), the `install` and `version` commands, and the `host` entry. |
 | `internal/proto/` | The one message shape both sides speak, plus the extension id and host name. |
 | `internal/native/` | Chrome's framing: 4-byte native-endian length, then JSON. |
-| `internal/hostd/` | The host: numbers each request, relays it, returns the reply to the socket connection that asked. |
-| `internal/client/` | The CLI's side of the socket, and where the socket lives. |
+| `internal/hostd/` | The host: learns its profile, names its socket for it, numbers each request, relays it, returns the reply to the socket connection that asked. |
+| `internal/client/` | The CLI's side of the sockets: where they live, the host each name stands for, one call. |
 | `internal/build/` | The version `mise run build` and `.goreleaser.yaml` stamp in. |
 | `extension/` | The MV3 extension. Its `key` fixes the id. |
 | `scripts/fakechrome.py` | A scripted Chrome on the host's pipes, for driving headless. |

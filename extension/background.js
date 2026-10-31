@@ -6,7 +6,42 @@
 const HOST = "com.hk9890.chromectl";
 const RECONNECT_MS = 2000;
 
+// profileId returns this profile's id, 8 hex digits, made on the first call
+// and kept in IndexedDB: every profile has its own, clearing browsing data
+// does not touch an extension's, and it needs no permission.
+function profileId() {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open("chromectl", 1);
+    open.onupgradeneeded = () => open.result.createObjectStore("profile");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      const tx = db.transaction("profile", "readwrite");
+      const store = tx.objectStore("profile");
+      let id;
+      store.get("id").onsuccess = (e) => {
+        id = e.target.result;
+        if (!id) {
+          id = crypto.getRandomValues(new Uint32Array(1))[0].toString(16).padStart(8, "0");
+          store.put(id, "id");
+        }
+      };
+      tx.oncomplete = () => {
+        db.close();
+        resolve(id);
+      };
+      // A commit can fail with no request error, as on a full quota; only
+      // abort fires then, and the host would wait for ever.
+      tx.onabort = () => reject(tx.error ?? new Error("the profile id was not saved"));
+    };
+  });
+}
+
 const commands = {
+  async identify() {
+    return { profile: await profileId() };
+  },
+
   async list() {
     const tabs = await chrome.tabs.query({});
     return tabs.map((t) => ({

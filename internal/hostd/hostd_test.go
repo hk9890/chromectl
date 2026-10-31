@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,35 +19,66 @@ import (
 	"github.com/hk9890/chromectl/internal/proto"
 )
 
-// fakeExtension plays Chrome's side of the pipe: it answers every request it
-// reads with a reply carrying the same seq.
-func fakeExtension(t *testing.T, answer func(proto.Request) proto.Reply) (socket string, done func()) {
+const profile = "0123abcd"
+
+// starts gives each host a later start than the one before, as two host
+// processes have.
+var starts atomic.Int64
+
+// socketDir is a fresh directory short enough that a host's socket name fits
+// a Unix socket path; t.TempDir's is not.
+func socketDir(t *testing.T) string {
 	t.Helper()
-	socket = filepath.Join(t.TempDir(), "s.sock")
-	return socket, fakeExtensionAt(t, socket, answer)
+	dir, err := os.MkdirTemp("", "cc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
 }
 
-// fakeExtensionAt starts a host on socket, which may already hold another
-// host's socket, and returns once this host accepts on it.
-func fakeExtensionAt(t *testing.T, socket string, answer func(proto.Request) proto.Reply) (done func()) {
+// fakeExtension plays Chrome's side of the pipe: it answers identify with
+// profile and every other request with a reply carrying the same seq.
+func fakeExtension(t *testing.T, answer func(proto.Request) proto.Reply) (socket string, done func()) {
 	t.Helper()
-	return rawExtensionAt(t, socket, func(_ json.RawMessage, req proto.Request, toHost io.Writer) error {
+	return fakeExtensionIn(t, socketDir(t), 1, answer)
+}
+
+// fakeExtensionIn starts a host for profile in dir, under the browser pid
+// browserPID, and returns once its socket is in place.
+func fakeExtensionIn(t *testing.T, dir string, browserPID int, answer func(proto.Request) proto.Reply) (socket string, done func()) {
+	t.Helper()
+	return rawExtensionIn(t, dir, browserPID, identifying(profile, func(_ json.RawMessage, req proto.Request, toHost io.Writer) error {
 		r := answer(req)
 		r.Seq = req.Seq
 		return native.Write(toHost, r)
-	})
+	}))
 }
 
-// rawExtensionAt is fakeExtensionAt for an extension that sees each request
-// as the host framed it and writes its own reply to the host's stdin, or none.
-func rawExtensionAt(t *testing.T, socket string, reply func(raw json.RawMessage, req proto.Request, toHost io.Writer) error) (done func()) {
+// identifying answers identify with id and hands every other request to
+// reply.
+func identifying(id string, reply func(json.RawMessage, proto.Request, io.Writer) error) func(json.RawMessage, proto.Request, io.Writer) error {
+	return func(raw json.RawMessage, req proto.Request, toHost io.Writer) error {
+		if req.Cmd == "identify" {
+			return native.Write(toHost, map[string]any{"seq": req.Seq, "result": proto.Identity{Profile: id}})
+		}
+		return reply(raw, req, toHost)
+	}
+}
+
+// rawExtensionIn starts a host in dir whose extension sees each request as
+// the host framed it, identify included, and writes its own reply to the
+// host's stdin, or none. It returns the socket the host renamed into place.
+func rawExtensionIn(t *testing.T, dir string, browserPID int, reply func(raw json.RawMessage, req proto.Request, toHost io.Writer) error) (socket string, done func()) {
 	t.Helper()
 	toHost, fromExt := io.Pipe()
 	fromHost, toExt := io.Pipe()
-	before, _ := os.Stat(socket)
+	before := sockets(dir)
 
 	ran := make(chan error, 1)
-	go func() { ran <- hostd.Run(toHost, toExt, socket) }()
+	go func() {
+		ran <- hostd.Run(toHost, toExt, dir, hostd.Self{Browser: "chrome", BrowserPID: browserPID, Start: starts.Add(1)})
+	}()
 	go func() {
 		for {
 			var raw json.RawMessage
@@ -60,35 +92,158 @@ func rawExtensionAt(t *testing.T, socket string, reply func(raw json.RawMessage,
 			}
 		}
 	}()
-	for start := time.Now(); !listening(socket, before); time.Sleep(time.Millisecond) {
-		if time.Since(start) > 2*time.Second {
-			t.Fatal("host never bound its socket")
-		}
-	}
 	// Chrome closes both pipes at once.
-	return func() {
+	done = func() {
 		_ = fromExt.Close()
 		_ = toExt.Close()
 		if err := <-ran; err != nil {
 			t.Errorf("Run returned %v after Chrome closed the pipe", err)
 		}
 	}
+	for start := time.Now(); ; time.Sleep(time.Millisecond) {
+		for name := range sockets(dir) {
+			if !before[name] {
+				return filepath.Join(dir, name), done
+			}
+		}
+		if time.Since(start) > 2*time.Second {
+			t.Fatal("host never put its socket in place")
+		}
+	}
 }
 
-// listening reports whether a socket other than before is at the path and
-// accepts. The path appears at bind, before listen, so a file alone is not
-// a host that answers.
-func listening(socket string, before os.FileInfo) bool {
-	now, err := os.Stat(socket)
-	if err != nil || before != nil && os.SameFile(before, now) {
-		return false
+// sockets returns the visible socket names in dir.
+func sockets(dir string) map[string]bool {
+	names := map[string]bool{}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".sock") && !strings.HasPrefix(e.Name(), ".") {
+			names[e.Name()] = true
+		}
 	}
-	conn, err := net.Dial("unix", socket)
-	if err != nil {
-		return false
+	return names
+}
+
+// recordingExtension answers every request with result and hands the frame
+// the host sent, decoded by the JSON names the extension reads, to sent.
+func recordingExtension(t *testing.T, result any) (socket string, sent <-chan map[string]any, done func()) {
+	t.Helper()
+	frames := make(chan map[string]any, 1)
+	socket, done = rawExtensionIn(t, socketDir(t), 1, identifying(profile, func(raw json.RawMessage, req proto.Request, toHost io.Writer) error {
+		var fields map[string]any
+		_ = json.Unmarshal(raw, &fields)
+		frames <- fields
+		return native.Write(toHost, map[string]any{"seq": req.Seq, "result": result})
+	}))
+	return socket, frames, done
+}
+
+func TestTheSocketNamesTheProfileAndTheBrowser(t *testing.T) {
+	dir := socketDir(t)
+	socket, done := fakeExtensionIn(t, dir, 4242, func(proto.Request) proto.Reply { return proto.Reply{} })
+	defer done()
+
+	hosts, err := client.Hosts(dir)
+	if err != nil || len(hosts) != 1 {
+		t.Fatalf("Hosts = %+v, %v", hosts, err)
 	}
-	_ = conn.Close()
-	return true
+	if h := hosts[0]; h.Profile != profile || h.Browser != "chrome" || h.BrowserPID != 4242 || h.Path != socket {
+		t.Fatalf("host = %+v, socket %s", h, socket)
+	}
+}
+
+// The socket appears only once the host knows its profile, so the CLI never
+// sees a host it cannot name.
+func TestTheHostListensOnlyAfterIdentify(t *testing.T) {
+	dir := socketDir(t)
+	answer := make(chan struct{})
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		if n := len(sockets(dir)); n != 0 {
+			t.Errorf("%d sockets before identify was answered", n)
+		}
+		close(answer)
+	}()
+	_, done := rawExtensionIn(t, dir, 1, func(_ json.RawMessage, req proto.Request, toHost io.Writer) error {
+		if req.Cmd == "identify" {
+			<-answer
+			return native.Write(toHost, map[string]any{"seq": req.Seq, "result": proto.Identity{Profile: profile}})
+		}
+		return nil
+	})
+	done()
+}
+
+// An extension older than the binary does not know identify. The host stays
+// up, so the extension does not restart it every two seconds, and tells
+// every caller what to do.
+func TestAnExtensionWithoutIdentifyGetsAStaleHost(t *testing.T) {
+	dir := socketDir(t)
+	socket, done := rawExtensionIn(t, dir, 1, func(_ json.RawMessage, req proto.Request, toHost io.Writer) error {
+		return native.Write(toHost, map[string]any{"seq": req.Seq, "error": "unknown command " + req.Cmd})
+	})
+	defer done()
+
+	if !strings.HasPrefix(filepath.Base(socket), "stale.chrome.") {
+		t.Fatalf("socket = %s", socket)
+	}
+	if err := client.Call(socket, proto.Request{Cmd: "list"}, nil); err == nil || err.Error() != proto.StaleExtension {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// An extension that knows identify but cannot answer it, as when IndexedDB
+// fails, is not out of date; the host passes the extension's reason on.
+func TestAFailedIdentifyGivesItsReason(t *testing.T) {
+	socket, done := rawExtensionIn(t, socketDir(t), 1, func(_ json.RawMessage, req proto.Request, toHost io.Writer) error {
+		return native.Write(toHost, map[string]any{"seq": req.Seq, "error": "UnknownError: Internal error opening backing store"})
+	})
+	defer done()
+
+	err := client.Call(socket, proto.Request{Cmd: "list"}, nil)
+	if err == nil || err.Error() != "the chromectl extension could not give its profile id: UnknownError: Internal error opening backing store" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestStartTimeIsThisProcesssStart(t *testing.T) {
+	first, err := hostd.StartTime()
+	if err != nil || first <= 0 {
+		t.Fatalf("StartTime = %d, %v", first, err)
+	}
+	if again, _ := hostd.StartTime(); again != first {
+		t.Fatalf("StartTime changed from %d to %d", first, again)
+	}
+}
+
+func TestTheHostRemovesItsSocketWhenChromeCloses(t *testing.T) {
+	dir := socketDir(t)
+	_, done := fakeExtensionIn(t, dir, 1, func(proto.Request) proto.Reply { return proto.Reply{} })
+	done()
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Fatalf("left in the socket directory: %v", entries)
+	}
+}
+
+// A reload starts the new host before Chrome closes the old one's pipe. The
+// CLI takes the later one, and the old one removes only its own socket.
+func TestAReloadKeepsTheNewHost(t *testing.T) {
+	dir := socketDir(t)
+	_, oldDone := fakeExtensionIn(t, dir, 7, func(proto.Request) proto.Reply { return proto.Reply{Error: "old host"} })
+	newSocket, newDone := fakeExtensionIn(t, dir, 7, func(proto.Request) proto.Reply { return proto.Reply{Error: "new host"} })
+	defer newDone()
+
+	hosts, _ := client.Hosts(dir)
+	if len(hosts) != 1 || hosts[0].Path != newSocket {
+		t.Fatalf("while both run, Hosts = %+v, want only %s", hosts, newSocket)
+	}
+	oldDone()
+	if names := sockets(dir); len(names) != 1 || !names[filepath.Base(newSocket)] {
+		t.Fatalf("after the old host exited, sockets = %v", names)
+	}
+	if err := client.Call(newSocket, proto.Request{Cmd: "list"}, nil); err == nil || err.Error() != "new host" {
+		t.Fatalf("Call = %v, want the new host's answer", err)
+	}
 }
 
 func TestListReachesTheExtensionAndComesBack(t *testing.T) {
@@ -108,21 +263,6 @@ func TestListReachesTheExtensionAndComesBack(t *testing.T) {
 	if len(tabs) != 1 || tabs[0].URL != "https://github.com/pulls" || !tabs[0].Active {
 		t.Fatalf("tabs = %+v", tabs)
 	}
-}
-
-// recordingExtension answers every request with result and hands the frame
-// the host sent, decoded by the JSON names the extension reads, to sent.
-func recordingExtension(t *testing.T, result any) (socket string, sent <-chan map[string]any, done func()) {
-	t.Helper()
-	socket = filepath.Join(t.TempDir(), "s.sock")
-	frames := make(chan map[string]any, 1)
-	done = rawExtensionAt(t, socket, func(raw json.RawMessage, req proto.Request, toHost io.Writer) error {
-		var fields map[string]any
-		_ = json.Unmarshal(raw, &fields)
-		frames <- fields
-		return native.Write(toHost, map[string]any{"seq": req.Seq, "result": result})
-	})
-	return socket, frames, done
 }
 
 func TestOpenSendsUrlAndWindow(t *testing.T) {
@@ -179,8 +319,7 @@ func TestTheExtensionsErrorIsTheCallersError(t *testing.T) {
 
 // One reply the host cannot decode fails its own call, not the host.
 func TestABadReplyFailsOnlyItsCall(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "s.sock")
-	done := rawExtensionAt(t, socket, func(_ json.RawMessage, req proto.Request, toHost io.Writer) error {
+	socket, done := rawExtensionIn(t, socketDir(t), 1, identifying(profile, func(_ json.RawMessage, req proto.Request, toHost io.Writer) error {
 		switch req.Tab {
 		case 1:
 			return native.Write(toHost, map[string]any{"seq": req.Seq, "error": 5})
@@ -188,7 +327,7 @@ func TestABadReplyFailsOnlyItsCall(t *testing.T) {
 			return native.Write(toHost, map[string]any{"seq": fmt.Sprint(req.Seq), "result": 1})
 		}
 		return native.Write(toHost, map[string]any{"seq": req.Seq, "result": map[string]int{"id": req.Tab}})
-	})
+	}))
 	defer done()
 
 	// Tab 1's reply names its seq; tab 2's seq does not decode, so the host
@@ -207,9 +346,8 @@ func TestABadReplyFailsOnlyItsCall(t *testing.T) {
 // A caller that never reads its reply cannot keep the host alive once
 // Chrome is gone.
 func TestACallerThatDoesNotReadCannotHoldTheHost(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "s.sock")
 	answered := make(chan struct{})
-	done := rawExtensionAt(t, socket, func(_ json.RawMessage, req proto.Request, toHost io.Writer) error {
+	socket, done := rawExtensionIn(t, socketDir(t), 1, identifying(profile, func(_ json.RawMessage, req proto.Request, toHost io.Writer) error {
 		defer close(answered)
 		// Larger than a socket buffer, so the host's write blocks. native.Write
 		// refuses it: the limit is for the host's direction only.
@@ -219,7 +357,7 @@ func TestACallerThatDoesNotReadCannotHoldTheHost(t *testing.T) {
 		}
 		_, err := toHost.Write(frame)
 		return err
-	})
+	}))
 
 	conn, err := net.Dial("unix", socket)
 	if err != nil {
@@ -242,18 +380,17 @@ func TestACallerThatDoesNotReadCannotHoldTheHost(t *testing.T) {
 // A call that is pending when Chrome closes the pipe gets its answer before
 // Run returns, and so before the host process exits.
 func TestAPendingCallHearsThatChromeWentAway(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "s.sock")
 	asked := make(chan struct{})
-	done := rawExtensionAt(t, socket, func(json.RawMessage, proto.Request, io.Writer) error {
+	socket, done := rawExtensionIn(t, socketDir(t), 1, identifying(profile, func(json.RawMessage, proto.Request, io.Writer) error {
 		close(asked)
 		return nil
-	})
+	}))
 
 	errs := make(chan error, 1)
 	go func() { errs <- client.Call(socket, proto.Request{Cmd: "list"}, nil) }()
 	<-asked
 	done()
-	if err := <-errs; err == nil || err.Error() != "chrome went away: EOF" {
+	if err := <-errs; err == nil || err.Error() != proto.ChromeGone+": EOF" {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -280,29 +417,5 @@ func TestConcurrentCallsAreCorrelatedBySeq(t *testing.T) {
 		if err := <-errs; err != nil {
 			t.Error(err)
 		}
-	}
-}
-
-func TestWithoutAHostTheClientSaysSo(t *testing.T) {
-	err := client.Call(filepath.Join(t.TempDir(), "absent.sock"), proto.Request{Cmd: "list"}, nil)
-	if err != client.ErrNoHost {
-		t.Fatalf("err = %v, want ErrNoHost", err)
-	}
-}
-
-// A reload of the extension starts the new host before Chrome closes the old
-// host's pipe; the old host must leave the new host's socket in place.
-func TestAnOldHostExitingKeepsTheNewHostsSocket(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "s.sock")
-	oldDone := fakeExtensionAt(t, socket, func(proto.Request) proto.Reply { return proto.Reply{Error: "old host"} })
-	newDone := fakeExtensionAt(t, socket, func(proto.Request) proto.Reply { return proto.Reply{Error: "new host"} })
-	oldDone()
-
-	if err := client.Call(socket, proto.Request{Cmd: "list"}, nil); err == nil || err.Error() != "new host" {
-		t.Fatalf("after the old host exited, Call = %v, want the new host's answer", err)
-	}
-	newDone()
-	if err := client.Call(socket, proto.Request{Cmd: "list"}, nil); err != client.ErrNoHost {
-		t.Fatalf("after every host exited, Call = %v, want ErrNoHost", err)
 	}
 }

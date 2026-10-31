@@ -6,6 +6,8 @@
 |---|---|---|---|
 | Framing | nothing | `internal/native/*_test.go` | `mise run test` |
 | Host against a fake extension | nothing | `internal/hostd/hostd_test.go` | `mise run test` |
+| Socket names, the socket directory, one call | nothing | `internal/client/client_test.go` | `mise run test` |
+| The CLI against several hosts, each with a fake extension | nothing | `cmd/chromectl/main_test.go` | `mise run test` |
 | `install` against temporary directories | nothing | `cmd/chromectl/install_test.go` | `mise run test` |
 | The built binary on real pipes | Python 3 | `scripts/fakechrome.py` | `mise run drive` |
 | Real Chrome | the user's browser and display | none automated | by hand, [RUNNING.md](RUNNING.md) |
@@ -13,7 +15,12 @@
 The fake extension in `hostd_test.go` plays Chrome's side of the pipe: it reads
 framed requests and answers with the same `seq`. It is the pattern for any new
 command: one test per command, asserting what the extension received and what
-the client got back.
+the client got back. It answers `identify` first; the host opens no socket
+before.
+
+Give a test that starts a host a directory from `os.MkdirTemp("", "cc")`, not
+`t.TempDir()`: a host's socket name is long, and a Unix socket path holds 108
+bytes.
 
 Start every test that calls `install` with `isolate(t)` from `install_test.go`.
 It points `HOME` and the XDG directories at temporary directories, so the test

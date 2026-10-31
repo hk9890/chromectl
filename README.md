@@ -9,18 +9,23 @@ every command is a one-shot client of that host over a Unix socket. There is no
 daemon to start or enable.
 
 ```
-chromectl list                 # id  window  active  title  url
+chromectl list                 # id  window  active  browser  title  url
 chromectl activate <tab-id>    # activate the tab and focus its window
 chromectl open <url> [window]  # open a new tab, in that window or the last focused one
 chromectl close <tab-id>
 ```
 
-`list --json` prints a JSON array of `{id, window, active, title, url}`;
-`open --json <url>` prints `{id, window}`. Put `--json` before the arguments.
-Give `open` a full URL: `https://www.orf.at`, not `www.orf.at`.
+`list --json` prints a JSON array of
+`{id, window, active, browser, profile, title, url}`; `open --json <url>`
+prints `{id, window}`. Put `--json` before the arguments. Give `open` a full
+URL: `https://www.orf.at`, not `www.orf.at`.
 
-Tab ids are Chrome's own and reset when Chrome restarts. Find a tab by its URL
-with `chromectl list`, then act on its id.
+A tab or window id is `<profile>:<number>`, for example `3f9a12bc:812`: the
+browser profile that owns it, and Chrome's own number, which resets when
+Chrome restarts. `list` shows the tabs of every profile of every browser that
+has the extension loaded. Find a tab by its URL with `chromectl list`, then act
+on its id. With more than one profile open, give `open` a window id from
+`list`, so it knows which profile to open the tab in.
 
 ## Install
 
