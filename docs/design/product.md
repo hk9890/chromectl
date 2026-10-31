@@ -63,7 +63,7 @@ extension beside it. The manifest names that copy, and the user loads the
 extension from there. One fixed directory makes an upgrade `mise upgrade`,
 `chromectl install`, and a reload of the extension's card; nothing is loaded
 again from a new path. Why the manifest does not name the running binary is in
-[architecture.md](architecture.md#rejected-alternatives).
+[decisions.md](decisions.md).
 
 The extension id is fixed by a public key in its manifest. Without that, an
 unpacked extension's id would depend on the directory it was loaded from, and
