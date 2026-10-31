@@ -35,7 +35,8 @@ tests, and publishes with GoReleaser (`.goreleaser.yaml`).
 
 6. Dispatch the workflow and watch the run whose URL it prints; on a
    re-dispatch, a lookup by tag can return the previous run. A tag with no
-   `CHANGELOG.md` section fails before anything is published.
+   `CHANGELOG.md` section, or with a different version in
+   `extension/manifest.json`, fails before anything is published.
 
    ```bash
    gh workflow run release.yml --ref vX.Y.Z
@@ -58,23 +59,21 @@ tests, and publishes with GoReleaser (`.goreleaser.yaml`).
 
 ## Fix a failed release
 
-The dispatched ref must be the tagged commit: the workflow file is read from
-that ref, and GoReleaser refuses a checkout that is not the tag.
+Leave a pushed tag where it is. proxy.golang.org keeps the first commit it
+sees for a version, so a moved tag breaks `go install …@vX.Y.Z` with a
+checksum error.
 
 After a run that failed on a network or GitHub error, run steps 6 and 7 of
-*Cut a release* again. After any other failure:
+*Cut a release* again; a re-dispatch replaces the assets
+(`release.replace_existing_artifacts`). After any other failure, ship the fix
+as the next version:
 
-1. Land the fix by PR.
-2. Run steps 3 and 4 of *Cut a release* again, on the new `main`.
-3. Move the tag onto it:
-
-   ```bash
-   git tag -f -a vX.Y.Z -m "chromectl vX.Y.Z"
-   git push -f origin vX.Y.Z
-   ```
-
-4. Run steps 6 and 7 of *Cut a release* again. A re-dispatch replaces the
-   assets (`release.replace_existing_artifacts`).
+1. Land the fix by PR. In it, rename the `## vX.Y.Z` section of
+   `CHANGELOG.md` to the next version, so its entries ship there, and set that
+   version in `extension/manifest.json`.
+2. Delete the GitHub release the failed run published, if any, and keep the
+   tag: `gh release delete vX.Y.Z --yes`.
+3. Run *Cut a release* from step 3 for the next version.
 
 ## What goes in the CHANGELOG section
 

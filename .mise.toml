@@ -14,6 +14,8 @@ CGO_ENABLED = "0"
 description = "Build the chromectl binary into ./bin"
 run = """
 VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)
+# GoReleaser stamps the version without the tag's v; a source build matches it.
+VERSION=${VERSION#v}
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)
 DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 PKG=github.com/hk9890/chromectl/internal/build

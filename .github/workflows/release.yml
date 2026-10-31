@@ -28,6 +28,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      # chrome://extensions shows the manifest's version; it must be the tag's.
+      - name: Extension manifest version matches the tag
+        run: |
+          manifest=$(jq -r .version extension/manifest.json)
+          if [ "$manifest" != "${GITHUB_REF_NAME#v}" ]; then
+            echo "extension/manifest.json has version $manifest, the tag is $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
