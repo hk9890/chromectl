@@ -97,6 +97,7 @@ join a group of another profile:
 | Another group has the title | The tab moves into it, the group with the most recently accessed tab where several share the title | The same choice as `group activate` |
 | The group is in an incognito window and the tab is not, or the reverse | That group is passed over | Chrome cannot move a tab between the two |
 | The group is in another window | Chrome moves the tab to that window; the output names the window it is in now | That is how Chrome groups a tab |
+| Another profile has a group with the title, the tab's profile none | A new group with the title in the tab's profile; `group activate` then raises whichever of the two was used last | A tab cannot join a group of another profile, and a failure would need the exit code the next row avoids |
 | No group has the title | A new group with the title around the tab, in the tab's window | The same as `group activate`, and a failure would need a "not found" exit code nothing else needs |
 | Chrome cannot group the tab, as in an `--app` window | Chrome's error, exit 1 | Chrome owns which tabs a group can hold |
 
