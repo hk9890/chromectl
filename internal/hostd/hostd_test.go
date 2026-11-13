@@ -315,6 +315,22 @@ func TestActivateGroupSendsTitleUrlAndWindow(t *testing.T) {
 	}
 }
 
+func TestAddToGroupSendsTabAndTitle(t *testing.T) {
+	socket, sent, done := recordingExtension(t, proto.Grouped{ID: 5, Window: 2, Group: 11, Created: true})
+	defer done()
+
+	var grouped proto.Grouped
+	if err := client.Call(socket, proto.Request{Cmd: "add-to-group", Tab: 5, Title: "chromectl"}, &grouped); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-sent; got["cmd"] != "add-to-group" || got["id"] != float64(5) || got["title"] != "chromectl" {
+		t.Fatalf("the extension received %v", got)
+	}
+	if grouped != (proto.Grouped{ID: 5, Window: 2, Group: 11, Created: true}) {
+		t.Fatalf("grouped = %+v", grouped)
+	}
+}
+
 func TestCloseSendsTheTabId(t *testing.T) {
 	socket, sent, done := recordingExtension(t, map[string]any{})
 	defer done()

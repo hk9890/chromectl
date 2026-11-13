@@ -104,7 +104,7 @@ func exitCode(err error) int {
 
 var compositeID = regexp.MustCompile(`^(` + proto.ProfileID + `):([0-9]+)$`)
 
-// parseID reads a tab or window id as list prints it: the profile that owns
+// parseID reads a tab or window id as tab list prints it: the profile that owns
 // it, a colon, and Chrome's number, which starts at 1.
 func parseID(kind, arg string) (profile string, id int, err error) {
 	m := compositeID.FindStringSubmatch(arg)
@@ -112,7 +112,7 @@ func parseID(kind, arg string) (profile string, id int, err error) {
 		id, err = strconv.Atoi(m[2])
 	}
 	if m == nil || err != nil || id < 1 {
-		return "", 0, badUsage("%s id %q is not of the form <profile>:<number> that list prints", kind, arg)
+		return "", 0, badUsage("%s id %q is not of the form <profile>:<number> that tab list prints", kind, arg)
 	}
 	return m[1], id, nil
 }
@@ -173,23 +173,30 @@ func callProfile(hs []client.Host, profile string, req proto.Request, out any) e
 	return noHostFor(profile)
 }
 
+// tabCommand sends cmd, activate or close, for the one tab args name.
 func tabCommand(cmd string, args []string) error {
-	f := newFlags(cmd, false)
+	f := newFlags("tab "+cmd, false)
 	if err := f.parse(args); err != nil {
 		return err
 	}
 	if f.NArg() != 1 {
-		return badUsage("%s takes exactly one tab id", cmd)
+		return badUsage("tab %s takes exactly one tab id", cmd)
 	}
-	profile, id, err := parseID("tab", f.Arg(0))
-	if err != nil {
-		return err
+	_, err := callTab(f.Arg(0), proto.Request{Cmd: cmd}, nil)
+	return err
+}
+
+// callTab sends req for the tab id arg names to the host of its profile, and
+// returns that profile.
+func callTab(arg string, req proto.Request, out any) (profile string, err error) {
+	if profile, req.Tab, err = parseID("tab", arg); err != nil {
+		return "", err
 	}
 	hs, err := hosts()
 	if err != nil {
-		return err
+		return "", err
 	}
-	return callProfile(hs, profile, proto.Request{Cmd: cmd, Tab: id}, nil)
+	return profile, callProfile(hs, profile, req, out)
 }
 
 // hostAnswer is one host's result to a request every host was asked.
@@ -236,13 +243,13 @@ func profileLabel(h client.Host) string {
 	return h.Profile
 }
 
-func list(w io.Writer, args []string) error {
-	f := newFlags("list", true)
+func tabList(w io.Writer, args []string) error {
+	f := newFlags("tab list", true)
 	if err := f.parse(args); err != nil {
 		return err
 	}
 	if f.NArg() != 0 {
-		return badUsage("list takes no arguments")
+		return badUsage("tab list takes no arguments")
 	}
 	hs, err := hosts()
 	if err != nil {
@@ -298,18 +305,18 @@ func list(w io.Writer, args []string) error {
 		}
 	}
 	if err == nil && len(failures) > 0 {
-		err = incompleteError{"list", failures[0]}
+		err = incompleteError{"tab list", failures[0]}
 	}
 	return err
 }
 
-func groups(w io.Writer, args []string) error {
-	f := newFlags("groups", true)
+func groupList(w io.Writer, args []string) error {
+	f := newFlags("group list", true)
 	if err := f.parse(args); err != nil {
 		return err
 	}
 	if f.NArg() != 0 {
-		return badUsage("groups takes no arguments")
+		return badUsage("group list takes no arguments")
 	}
 	hs, err := hosts()
 	if err != nil {
@@ -341,25 +348,25 @@ func groups(w io.Writer, args []string) error {
 		}
 	}
 	if err == nil && len(failures) > 0 {
-		err = incompleteError{"groups list", failures[0]}
+		err = incompleteError{"group list", failures[0]}
 	}
 	return err
 }
 
-// activateGroup raises the group titled title in the profile that used it
+// groupActivate raises the group titled title in the profile that used it
 // last, or creates it with url: in the window's profile where a window id is
 // given, else in the one profile that runs.
-func activateGroup(w io.Writer, args []string) error {
-	f := newFlags("activate-group", true)
+func groupActivate(w io.Writer, args []string) error {
+	f := newFlags("group activate", true)
 	if err := f.parse(args); err != nil {
 		return err
 	}
 	if f.NArg() < 2 || f.NArg() > 3 {
-		return badUsage("activate-group takes a title, a url and an optional window id")
+		return badUsage("group activate takes a title, a url and an optional window id")
 	}
 	req := proto.Request{Cmd: "activate-group", Title: f.Arg(0), URL: f.Arg(1)}
 	if req.Title == "" || req.URL == "" {
-		return badUsage("activate-group needs a title and a url that are not empty")
+		return badUsage("group activate needs a title and a url that are not empty")
 	}
 	var windowProfile string
 	if f.NArg() == 3 {
@@ -395,7 +402,7 @@ func activateGroup(w io.Writer, args []string) error {
 	case windowProfile != "":
 		profile = windowProfile
 	default:
-		if profile, err = onlyProfile(hs, "activate-group"); err != nil {
+		if profile, err = onlyProfile(hs, "group activate"); err != nil {
 			return err
 		}
 	}
@@ -428,13 +435,13 @@ func silent(failures []error) error {
 	return nil
 }
 
-func open(w io.Writer, args []string) error {
-	f := newFlags("open", true)
+func tabOpen(w io.Writer, args []string) error {
+	f := newFlags("tab open", true)
 	if err := f.parse(args); err != nil {
 		return err
 	}
 	if f.NArg() < 1 || f.NArg() > 2 {
-		return badUsage("open takes a url and an optional window id")
+		return badUsage("tab open takes a url and an optional window id")
 	}
 	req := proto.Request{Cmd: "open", URL: f.Arg(0)}
 	var profile string
@@ -450,7 +457,7 @@ func open(w io.Writer, args []string) error {
 		return err
 	}
 	if profile == "" {
-		if profile, err = onlyProfile(hs, "open"); err != nil {
+		if profile, err = onlyProfile(hs, "tab open"); err != nil {
 			return err
 		}
 	}
@@ -466,6 +473,38 @@ func open(w io.Writer, args []string) error {
 		}{id, window})
 	}
 	_, err = fmt.Fprintf(w, "%s\t%s\n", id, window)
+	return err
+}
+
+// groupAdd puts the tab in the group titled title in the tab's profile, or in
+// a new group with that title in the tab's window. A group in another profile
+// cannot take the tab, so no other host is asked.
+func groupAdd(w io.Writer, args []string) error {
+	f := newFlags("group add", true)
+	if err := f.parse(args); err != nil {
+		return err
+	}
+	if f.NArg() != 2 {
+		return badUsage("group add takes a title and a tab id")
+	}
+	if f.Arg(0) == "" {
+		return badUsage("group add needs a title that is not empty")
+	}
+	var grouped proto.Grouped
+	profile, err := callTab(f.Arg(1), proto.Request{Cmd: "add-to-group", Title: f.Arg(0)}, &grouped)
+	if err != nil {
+		return err
+	}
+	tab, window, group := composite(profile, grouped.ID), composite(profile, grouped.Window), composite(profile, grouped.Group)
+	if *f.json {
+		return printJSON(w, struct {
+			ID      string `json:"id"`
+			Window  string `json:"window"`
+			Group   string `json:"group"`
+			Created bool   `json:"created"`
+		}{tab, window, group, grouped.Created})
+	}
+	_, err = fmt.Fprintf(w, "%s\t%s\t%s\t%t\n", tab, window, group, grouped.Created)
 	return err
 }
 

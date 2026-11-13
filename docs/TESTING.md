@@ -40,5 +40,8 @@ CI runs the same checks on every push in `.github/workflows/ci.yml`, plus
 - `mise run drive` passes when the change touched `cmd/`, `internal/hostd` or
   `internal/client`; it is the only layer that runs the real binary.
 - A change to `extension/background.js` has been loaded into a real Chrome and
-  `chromectl list` answered, or the report says it was not. The Go tests cannot
+  `chromectl tab list` answered, or the report says it was not. The Go tests cannot
   see the JavaScript.
+- A command the change adds or alters in `extension/background.js` has run
+  once against that Chrome, on tabs the user confirmed, through each branch it
+  has, or the report says which did not; `tab list` answering does not reach it.

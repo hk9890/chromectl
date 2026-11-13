@@ -24,29 +24,37 @@ import (
 
 const usage = `usage: chromectl <command> [args]
 
-  list [--json]                every tab of every profile: id, window, group,
+  tab list [--json]            every tab of every profile: id, window, group,
                                active, browser, title, url (tab-separated, or a
                                JSON array)
-  groups [--json]              every open tab group: id, window, title
-  activate <tab-id>            activate the tab and focus its window
-  activate-group [--json] <title> <url> [window]
+  tab activate <tab-id>        activate the tab and focus its window
+  tab open [--json] <url> [window]
+                               open url in a new tab, in the given window or the
+                               last focused one; prints its id and window
+  tab close <tab-id>           close the tab
+
+  group list [--json]          every open tab group: id, window, title
+  group activate [--json] <title> <url> [window]
                                raise the tab group titled title: activate its tab
                                at url, else under url, else its last used tab.
                                Without such a group, open url in a new group with
                                that title, in the given window or the last
                                focused one. Prints the tab's id, its window,
                                whether the group was created, and the tab's title
-  open [--json] <url> [window] open url in a new tab, in the given window or the
-                               last focused one; prints its id and window
-  close <tab-id>               close the tab
+  group add [--json] <title> <tab-id>
+                               put the tab in the tab group titled title, or in a
+                               new group with that title in the tab's window.
+                               Prints the tab's id, its window, the group's id,
+                               and whether the group was created
+
   install                      copy this binary and the extension to ~/.local/share/chromectl
                                and register that copy as the native messaging host
   version                      print the version
   host                         the native messaging host; Chrome starts this, not you
 
-Tab, window and group ids are <profile>:<number>, as list prints them. With
-several profiles, open, and activate-group where it creates a group, need a
-window id.
+Tab, window and group ids are <profile>:<number>, as tab list prints them.
+With several profiles, tab open, and group activate where it creates a group,
+need a window id.
 
 Every command that calls Chrome takes --timeout <duration> (default 5s) before
 its arguments. Exit codes: 1 an error from Chrome or chromectl, 2 bad usage,
@@ -66,18 +74,10 @@ func main() {
 	}
 	var err error
 	switch cmd {
-	case "list":
-		err = list(os.Stdout, args)
-	case "activate":
-		err = tabCommand("activate", args)
-	case "close":
-		err = tabCommand("close", args)
-	case "groups":
-		err = groups(os.Stdout, args)
-	case "activate-group":
-		err = activateGroup(os.Stdout, args)
-	case "open":
-		err = open(os.Stdout, args)
+	case "tab":
+		err = tab(args)
+	case "group":
+		err = group(args)
 	case "install":
 		err = install(args)
 	case "host":
@@ -94,6 +94,60 @@ func main() {
 		fmt.Fprintln(os.Stderr, "chromectl:", err)
 		os.Exit(exitCode(err))
 	}
+}
+
+// actions are the actions of each object, in the order usage lists them.
+var actions = map[string]string{
+	"tab":   "list, activate, open, close",
+	"group": "list, activate, add",
+}
+
+// action splits args into the action on object and its arguments. With no
+// action, or help in its place, it returns the error main reports.
+func action(object string, args []string) (string, []string, error) {
+	if len(args) == 0 {
+		return "", nil, badUsage("%s needs an action: %s", object, actions[object])
+	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		fmt.Print(usage)
+		return "", nil, nil
+	}
+	return args[0], args[1:], nil
+}
+
+func unknownAction(object, act string) error {
+	return badUsage("unknown command \"%s %s\"; the %s actions are %s", object, act, object, actions[object])
+}
+
+func tab(args []string) error {
+	act, args, err := action("tab", args)
+	switch {
+	case err != nil || act == "":
+		return err
+	case act == "list":
+		return tabList(os.Stdout, args)
+	case act == "activate", act == "close":
+		return tabCommand(act, args)
+	case act == "open":
+		return tabOpen(os.Stdout, args)
+	}
+	return unknownAction("tab", act)
+}
+
+func group(args []string) error {
+	act, args, err := action("group", args)
+	switch {
+	case err != nil || act == "":
+		return err
+	case act == "list":
+		return groupList(os.Stdout, args)
+	case act == "activate":
+		return groupActivate(os.Stdout, args)
+	case act == "add":
+		return groupAdd(os.Stdout, args)
+	}
+	return unknownAction("group", act)
 }
 
 // host runs the native messaging host for the browser that started it, its

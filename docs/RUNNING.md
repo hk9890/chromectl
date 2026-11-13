@@ -10,10 +10,11 @@ mise run drive
 ```
 
 `scripts/fakechrome.py` starts `./bin/chromectl` on pipes with the arguments Chrome passes, plays the
-extension, and runs `list`, `groups`, `activate-group`, `open` and `activate`
-through the CLI, each with the exit code it must give. It prints
+extension, and runs `tab list`, `tab open`, `tab activate`, `group list`,
+`group activate` and `group add` through the CLI, each with the exit code it
+must give, then checks that an old flat name such as `list` exits 2. It prints
 every request the host forwarded and every CLI result, then closes the pipe and
-reports the host's exit and that `list` then finds no host. It exits 1 on the
+reports the host's exit and that `tab list` then finds no host. It exits 1 on the
 first result that differs from its `cases`. Edit `extension()` and `cases`
 together to script a different answer.
 
@@ -26,9 +27,9 @@ with `{"profile": "<8 hex digits>"}`: it opens its socket only after that.
 
 The sockets in `$XDG_RUNTIME_DIR/chromectl/` belong to the hosts the user's
 browsers started, one per profile. A CLI call against them acts on the user's
-real tabs. `list` is
-harmless; `activate` and `open` change what the user sees; `close` is
-destructive. Confirm before any of the last three.
+real tabs. `tab list` and `group list` are harmless; `tab activate`,
+`tab open`, `group activate` and `group add` change what the user sees;
+`tab close` is destructive. Confirm before any of the last five.
 
 Run `mise run chromectl -- <args>` to rebuild and call the CLI in one step.
 

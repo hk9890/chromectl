@@ -56,6 +56,15 @@ type Raised struct {
 	Title   string `json:"title"`
 }
 
+// Grouped is the result of add-to-group: the tab, the window it is in after
+// the move, its group, and whether the call created the group.
+type Grouped struct {
+	ID      int  `json:"id"`
+	Window  int  `json:"window"`
+	Group   int  `json:"group"`
+	Created bool `json:"created"`
+}
+
 // Identity is the result of the identify request the host sends the
 // extension when it starts: the profile's id, ProfileID.
 type Identity struct {

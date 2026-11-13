@@ -45,7 +45,7 @@ them. Git's rule holds because objects are never removed; hosts come and go.
 An id printed while two profiles ran could name a different profile after one
 stopped.
 
-**A `--profile` flag on `open`.** A second way to choose the host. The window
+**A `--profile` flag on `tab open`.** A second way to choose the host. The window
 id already names its profile, and both need a `list` to learn the value.
 
 **The host learns its profile from the CLI's question.** The socket named only
@@ -61,7 +61,7 @@ shows the name alone, and the extension cannot read that name either. The tab
 title is what Chrome says, so chromectl prints that, and the caller, which
 knows its browser, adds the suffix.
 
-**A window type in `list`.** Each tab would carry its window's type, so a
+**A window type in `tab list`.** Each tab would carry its window's type, so a
 caller that matches by URL could skip the tabs of `--app` windows. Rejected for
 now: the planned consumer, revier's project key, addresses groups, and a group
 cannot live in an `--app` window, so nothing would read the field. It is one
@@ -72,11 +72,12 @@ with a prefix, or open the URL. Rejected: it makes chromectl the judge of when
 a page is open, which is the matcher [product.md](product.md#model) leaves to
 the caller.
 
-**`open --group` and a raise-only `activate-group`.** `open --group <title>
-<url>` would add a tab to a group, creating it if needed, and an
-`activate-group <title>` without a URL would raise a group or fail. Rejected:
-`activate-group <title> <url>` does both jobs the consumer has in one call, no
-consumer adds a tab to an existing group, and a raise that can fail on a
+**`tab open --group` and a raise-only `group activate`.** `tab open --group
+<title> <url>` would open a tab straight into a group, creating it if needed,
+and a `group activate <title>` without a URL would raise a group or fail. Rejected:
+`group activate <title> <url>` opens into a group when it creates one, and
+`group add` puts any tab, a new one included, into a group, so a flag on
+`tab open` would be a second way to do the same. A raise that can fail on a
 missing group needs a "not found" exit code that nothing else needs.
 
 **A deadline in the host.** The host would answer a pending call with an error
@@ -118,7 +119,7 @@ command needing more is a different product still stands, for the set as it
 is now. Why `tabGroups` fits is in [Scope](product.md#scope).
 
 **chromectl never reads a URL to choose a tab.** The caller matched every URL.
-Now `activate-group` uses the URL it was given to rank the tabs inside the
+Now `group activate` uses the URL it was given to rank the tabs inside the
 group that its title found. That is the only exception: a matcher of its own
 stays rejected, as "Open-or-activate by URL prefix" above says. The ranking is
 in [Groups](product.md#groups), and why the caller still owns matching is in
@@ -138,3 +139,18 @@ CLI exits 4.
 **Exit 1 for every failure.** A bad argument, a missing host and Chrome's
 refusal all exited 1. A caller that falls back when no host runs could not
 tell that from a typo. Each now has its own code.
+
+These were replaced when chromectl learned to add a tab to a group.
+
+**A flat command list.** `list`, `groups`, `activate`, `activate-group`,
+`open`, `close`. The tab was the implied object, and the group was named
+twice, two ways: as a plural and as a suffix. A user could not guess one
+command from another, and adding a tab to a group would have added a third
+way: `group`, one letter from `groups`, though one reads and the other
+changes the browser. Commands now name the object first, `tab` or `group`,
+then the action. The old names were dropped with no alias.
+
+**"No consumer" as a reason to leave a group action out.** Adding a tab to a
+group was out until a consumer asked. It is one Chrome call on a permission
+chromectl already holds, and it completes the group commands, so it went in
+without one.
