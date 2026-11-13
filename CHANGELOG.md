@@ -4,8 +4,9 @@
 
 **Action required:** after the upgrade, run `chromectl install`, then click
 reload on the chromectl card at `chrome://extensions` in every profile that
-loads it. Until then, `group add` answers "unknown command", and `tab list`
-shows `-` for the two new columns, and `--json` gives `""` and `0`.
+loads it. Until then, `group add` fails with `unknown command add-to-group`,
+exit 1, and `tab list` shows `-` for the two new columns, and `--json` gives
+`""` and `0`.
 
 **Action required:** a script that calls chromectl must change:
 
