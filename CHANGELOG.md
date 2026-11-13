@@ -9,10 +9,10 @@ shows `-` for the two new columns, and `--json` gives `""` and `0`.
 
 **Action required:** a script that calls chromectl must change:
 
-- Every tab and group command now names its object first: `list` is `tab list`, `activate`
-  is `tab activate`, `open` is `tab open`, `close` is `tab close`, `groups`
-  is `group list`, and `activate-group` is `group activate`. The old names
-  are gone and exit 2.
+- Every tab and group command now names its object first: `list` is
+  `tab list`, `activate` is `tab activate`, `open` is `tab open`, `close` is
+  `tab close`, `groups` is `group list`, and `activate-group` is
+  `group activate`. The old names are gone and exit 2.
 - `tab list` has two new columns after `browser`: `windowType` and
   `lastAccessed`. `title` and `url` are now columns 8 and 9. `tab list
   --json` has the same two new fields.
@@ -26,7 +26,8 @@ New:
   are not in a normal browser window.
 - `tab list` shows when each tab last became active in its window, in
   milliseconds since the epoch, so a script that finds several tabs on one
-  page can take the most recent.
+  page can take the most recent. A Chrome older than 121 does not report
+  it, and the column shows `-`.
 
 ## v0.2.0
 

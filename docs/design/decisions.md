@@ -156,5 +156,6 @@ revier's project key, addressed groups: a group cannot live in an `--app`
 window, so nothing would have read the field. The key now lists tabs and
 matches their URL, and an `--app` window can hold a tab on the project's URL.
 Its window shows no browser suffix, so a caller that raises the window by its
-title cannot find it. `tab list` now carries the window's type, at the cost of
-one more Chrome call per list, so the caller can skip such a tab.
+title cannot find it. `tab list` now carries the window's type, so the caller
+can skip such a tab. One `windows.getAll` call gives every tab with its
+window, so the field costs no second call.
