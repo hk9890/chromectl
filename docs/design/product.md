@@ -137,7 +137,8 @@ when the tab's window last got the focus, in whole milliseconds since the
 epoch. The extension learns it from Chrome's focus events and keeps it in
 memory, so it is unknown for a window that has not had the focus since the
 extension started, as after a reload of the extension or a restart of
-Chrome. A focus that leaves Chrome for another application changes nothing.
+Chrome. The one exception is the window that has the focus as the extension
+starts: it gets the start time, the latest time it can have got the focus. A focus that leaves Chrome for another application changes nothing.
 The times are facts; how a caller weighs them against each other is its own
 policy, as matching a URL is. An extension older than a field sends none of
 it, and a Chrome older than 121 sends no `lastAccessed`: `-` in tab-separated

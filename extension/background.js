@@ -5,8 +5,9 @@
 
 const HOST = "com.hk9890.chromectl";
 const RECONNECT_MS = 2000;
-// Every window type that can hold a tab. Chrome's window events report only
-// normal and popup windows unless asked for more.
+// Every window type that holds a user's tab; a DevTools window would list its
+// own page as one. Chrome's window events report only normal and popup
+// windows unless asked for more.
 const WINDOW_TYPES = ["normal", "popup", "app"];
 
 // focusedAt maps a window id to when the window last got the focus, in
@@ -22,10 +23,12 @@ chrome.windows.onFocusChanged.addListener(
 );
 chrome.windows.onRemoved.addListener((id) => focusedAt.delete(id), { windowTypes: WINDOW_TYPES });
 // A window that has the focus while the worker starts got it no later than
-// now; one in a Chrome that is in the background stays unknown.
+// the start, so it gets the start time, which any later focus event outranks.
+// A window of a Chrome that is in the background stays unknown.
+const startedAt = Date.now();
 chrome.windows.getLastFocused({ windowTypes: WINDOW_TYPES }).then(
   (w) => {
-    if (w.focused && !focusedAt.has(w.id)) focusedAt.set(w.id, Date.now());
+    if (w.focused && !focusedAt.has(w.id)) focusedAt.set(w.id, startedAt);
   },
   () => {},
 );

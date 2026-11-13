@@ -313,10 +313,10 @@ func tabList(w io.Writer, args []string) error {
 	return err
 }
 
-// millisOrDash is ms in decimal, or "-" for 0, a time the extension does not
-// know.
+// millisOrDash is ms in decimal, or "-" for a time the extension does not
+// know, which it sends as 0.
 func millisOrDash(ms int64) string {
-	if ms == 0 {
+	if ms <= 0 {
 		return "-"
 	}
 	return strconv.FormatInt(ms, 10)
