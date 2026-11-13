@@ -86,6 +86,18 @@ it from Chrome's own error and keep the text "chrome went away". Rejected:
 closing the connection without a reply says the same thing with no new field,
 and the CLI already has to handle a connection that closes early.
 
+**Window focus times in `chrome.storage.session` or IndexedDB.** The times
+`windowFocusedAt` reports would survive a restart of the worker, and in
+IndexedDB, which the profile id uses with no permission, a reload too.
+Rejected: IndexedDB also survives a restart of Chrome, which numbers its
+windows anew, so old times would attach to new windows unless the extension
+cleared them at each start. The storage API needs the `storage` permission.
+And the worker lives as long as Chrome
+([Three processes](architecture.md#three-processes)), so the times are lost
+only when the extension reloads or Chrome restarts. After a restart the
+windows they named are gone; after a reload each window is unknown until it
+is focused again, which a keypress that follows the user's work soon does.
+
 ## Superseded
 
 These held in v0.1.0 and were replaced when chromectl gave every profile its

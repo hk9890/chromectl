@@ -41,8 +41,13 @@ type Tab struct {
 	// An extension older than the field, or a Chrome older than 121, sends
 	// none, which decodes as 0.
 	LastAccessed float64 `json:"lastAccessed"`
-	Title        string  `json:"title"`
-	URL          string  `json:"url"`
+	// WindowFocusedAt is when the tab's window last got the focus, in
+	// milliseconds since the epoch. The extension learns it from focus
+	// events, so it is 0 for a window that has not had the focus since the
+	// extension started, and from an extension older than the field.
+	WindowFocusedAt float64 `json:"windowFocusedAt"`
+	Title           string  `json:"title"`
+	URL             string  `json:"url"`
 }
 
 // Group is one entry of a groups result. LastAccessed is the latest of its

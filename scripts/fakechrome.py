@@ -20,7 +20,7 @@ def extension():
         if req["cmd"] == "identify":
             write({"seq": req["seq"], "result": {"profile": profile}})
         elif req["cmd"] == "list":
-            write({"seq": req["seq"], "result": [{"id": 4, "window": 1, "windowType": "normal", "group": 7, "active": True, "lastAccessed": 1761900000000.5, "title": "Pull requests", "url": "https://github.com/pulls?q=is%3Aopen&sort=updated"}]})
+            write({"seq": req["seq"], "result": [{"id": 4, "window": 1, "windowType": "normal", "group": 7, "active": True, "lastAccessed": 1761900000000.5, "windowFocusedAt": 1761900500000, "title": "Pull requests", "url": "https://github.com/pulls?q=is%3Aopen&sort=updated"}]})
         elif req["cmd"] == "groups":
             write({"seq": req["seq"], "result": [{"id": 7, "window": 1, "title": "chromectl", "lastAccessed": 1761900000000.5}]})
         elif req["cmd"] == "activate-group":
@@ -45,10 +45,10 @@ print("socket:", os.path.basename(sock), flush=True)
 browser = os.path.basename(sock).split(".")[1]
 url = "https://github.com/pulls?q=is%3Aopen&sort=updated"
 tab, window, group = profile + ":4", profile + ":1", profile + ":7"
-listed = json.dumps([{"id": tab, "window": window, "group": group, "active": True, "browser": browser, "profile": profile, "windowType": "normal", "lastAccessed": 1761900000000, "title": "Pull requests", "url": url}], separators=(",", ":"))
+listed = json.dumps([{"id": tab, "window": window, "group": group, "active": True, "browser": browser, "profile": profile, "windowType": "normal", "lastAccessed": 1761900000000, "windowFocusedAt": 1761900500000, "title": "Pull requests", "url": url}], separators=(",", ":"))
 # Each case: the arguments, then the exit code, stdout and stderr the CLI must give.
 cases = (
-    (["tab", "list"], 0, "\t".join([tab, window, group, "*", browser, "normal", "1761900000000", "Pull requests", url]) + "\n", ""),
+    (["tab", "list"], 0, "\t".join([tab, window, group, "*", browser, "normal", "1761900000000", "1761900500000", "Pull requests", url]) + "\n", ""),
     (["group", "list"], 0, "\t".join([group, window, "chromectl"]) + "\n", ""),
     (["group", "activate", "--timeout", "2s", "chromectl", "https://github.com/hk9890/chromectl"], 0, "\t".join([tab, window, "false", "Pull requests"]) + "\n", ""),
     (["group", "add", "chromectl", tab], 0, "\t".join([tab, window, group, "false"]) + "\n", ""),

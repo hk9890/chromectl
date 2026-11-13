@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.4.0
+
+**Action required:** after the upgrade, run `chromectl install`, then click
+reload on the chromectl card at `chrome://extensions` in every profile that
+loads it. Until then, `tab list` shows `-` for the new column, and `--json`
+gives `0`.
+
+**Action required:** a script that reads `tab list` by column must change:
+the new column `windowFocusedAt` follows `lastAccessed`, so `title` and `url`
+are now columns 9 and 10. `tab list --json` has the same new field.
+
+New:
+
+- `tab list` shows when each tab's window last got the focus, in
+  milliseconds since the epoch. With it a script can tell which Chrome window
+  the user worked in last, which `lastAccessed` cannot: switching between
+  windows does not change it. The time is known only for a window focused
+  since the extension started, and shows `-` until then, as after a Chrome
+  restart.
+
 ## v0.3.0
 
 **Action required:** after the upgrade, run `chromectl install`, then click

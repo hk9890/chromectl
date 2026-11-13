@@ -117,7 +117,7 @@ split and never parses prose.
 
 | Command | Prints, tab-separated | `--json` |
 |---|---|---|
-| `tab list` | `id window group active browser windowType lastAccessed title url` per tab | array of `{id, window, group, active, browser, profile, windowType, lastAccessed, title, url}` |
+| `tab list` | `id window group active browser windowType lastAccessed windowFocusedAt title url` per tab | array of `{id, window, group, active, browser, profile, windowType, lastAccessed, windowFocusedAt, title, url}` |
 | `group list` | `id window title` per open group | array of `{id, window, title}` |
 | `tab open <url> [window]` | `id window` | `{id, window}` |
 | `group activate <title> <url> [window]` | `id window created title` | `{id, window, created, title}` |
@@ -132,10 +132,17 @@ for an `--app` window or an installed web app, or `popup`.
 milliseconds since the epoch, so a caller that finds several tabs on its URL
 can take the most recent, the choice `group activate` makes. Focusing another
 window does not change it: of two windows that each show the URL, the one
-activated last wins, not the one focused last. An extension older than the
-two fields sends neither, and a Chrome older than 121 sends no
-`lastAccessed`: `-` in tab-separated output, `""` and `0` in JSON. `group activate` prints the
-tab it activated. `created` says whether it
+activated last wins, not the one focused last. `windowFocusedAt` says that:
+when the tab's window last got the focus, in whole milliseconds since the
+epoch. The extension learns it from Chrome's focus events and keeps it in
+memory, so it is unknown for a window that has not had the focus since the
+extension started, as after a reload of the extension or a restart of
+Chrome. The one exception is the window that has the focus as the extension
+starts: it gets the start time, the latest time it can have got the focus. A focus that leaves Chrome for another application changes nothing.
+The times are facts; how a caller weighs them against each other is its own
+policy, as matching a URL is. An extension older than a field sends none of
+it, and a Chrome older than 121 sends no `lastAccessed`: `-` in tab-separated
+output, `""` and `0` in JSON. `group activate` prints the tab it activated. `created` says whether it
 made the group, and `title` is the tab's title, which is the text a normal
 Chrome window shows before its own suffix: what chromectl can give a caller
 that raises the window by its title. `group add` prints the tab it moved, the
@@ -251,7 +258,7 @@ the DevTools protocol and a test profile, not to a user's daily browser.
 | The host dies mid-call | The call exits 4. |
 | The extension is reloaded | The CLI uses the new host. |
 | One profile's host does not answer in time | `tab list` prints the other profiles' tabs, warns, and exits 4. |
-| The binary was upgraded, the extension not yet reloaded | Every call to that profile answers "reload the chromectl extension", exit 1. An extension that predates groups answers `group list` and `group activate` with "unknown command", and `tab list` shows its tabs in no group. One that predates `group add` answers it with "unknown command add-to-group". One that predates `windowType` and `lastAccessed` shows `-` for both. |
+| The binary was upgraded, the extension not yet reloaded | Every call to that profile answers "reload the chromectl extension", exit 1. An extension that predates groups answers `group list` and `group activate` with "unknown command", and `tab list` shows its tabs in no group. One that predates `group add` answers it with "unknown command add-to-group". One that predates `windowType` and `lastAccessed` shows `-` for both, and one that predates `windowFocusedAt` shows `-` for it. |
 | A profile was copied into a second browser | The CLI refuses that profile's ids and names both browsers. |
 | A profile was copied inside one browser | Known limit: the CLI reads it as a reload and shows only one of the two. |
 | No runtime directory, as in a session without logind | Known limit: the host cannot start, and the CLI reports no host. |
