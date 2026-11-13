@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.3.0
+
+**Action required:** after the upgrade, run `chromectl install`, then click
+reload on the chromectl card at `chrome://extensions` in every profile that
+loads it. Until then, `group add` answers "unknown command", and `tab list`
+shows `-` for the two new columns.
+
+**Action required:** a script that calls chromectl must change:
+
+- Every command now names its object first: `list` is `tab list`, `activate`
+  is `tab activate`, `open` is `tab open`, `close` is `tab close`, `groups`
+  is `group list`, and `activate-group` is `group activate`. The old names
+  are gone and exit 2.
+- `tab list` has two new columns after `browser`: `windowType` and
+  `lastAccessed`. `title` and `url` are now columns 8 and 9. `tab list
+  --json` has the same two new fields.
+
+New:
+
+- `chromectl group add <title> <tab-id>` puts a tab in the group titled
+  `<title>`, or in a new group with that title.
+- `tab list` shows each tab's window type (`normal`, `app` for an `--app`
+  window or an installed web app, `popup`), so a script can skip tabs that
+  are not in a normal browser window.
+- `tab list` shows when each tab last became active in its window, in
+  milliseconds since the epoch, so a script that finds several tabs on one
+  page can take the most recent.
+
 ## v0.2.0
 
 **Action required:** after the upgrade, run `chromectl install`, then click
