@@ -72,25 +72,12 @@ func main() {
 	if strings.HasPrefix(cmd, "chrome-extension://") {
 		cmd = "host"
 	}
-	if (cmd == "tab" || cmd == "group") && len(args) > 0 {
-		cmd, args = cmd+" "+args[0], args[1:]
-	}
 	var err error
 	switch cmd {
-	case "tab list":
-		err = tabList(os.Stdout, args)
-	case "tab activate":
-		err = tabCommand("activate", args)
-	case "tab open":
-		err = tabOpen(os.Stdout, args)
-	case "tab close":
-		err = tabCommand("close", args)
-	case "group list":
-		err = groupList(os.Stdout, args)
-	case "group activate":
-		err = groupActivate(os.Stdout, args)
-	case "group add":
-		err = groupAdd(os.Stdout, args)
+	case "tab":
+		err = tab(args)
+	case "group":
+		err = group(args)
 	case "install":
 		err = install(args)
 	case "host":
@@ -107,6 +94,60 @@ func main() {
 		fmt.Fprintln(os.Stderr, "chromectl:", err)
 		os.Exit(exitCode(err))
 	}
+}
+
+// actions are the actions of each object, in the order usage lists them.
+var actions = map[string]string{
+	"tab":   "list, activate, open, close",
+	"group": "list, activate, add",
+}
+
+// action splits args into the action on object and its arguments. With no
+// action, or help in its place, it returns the error main reports.
+func action(object string, args []string) (string, []string, error) {
+	if len(args) == 0 {
+		return "", nil, badUsage("%s needs an action: %s", object, actions[object])
+	}
+	switch args[0] {
+	case "-h", "--help", "help":
+		fmt.Print(usage)
+		return "", nil, nil
+	}
+	return args[0], args[1:], nil
+}
+
+func unknownAction(object, act string) error {
+	return badUsage("unknown command \"%s %s\"; the %s actions are %s", object, act, object, actions[object])
+}
+
+func tab(args []string) error {
+	act, args, err := action("tab", args)
+	switch {
+	case err != nil || act == "":
+		return err
+	case act == "list":
+		return tabList(os.Stdout, args)
+	case act == "activate", act == "close":
+		return tabCommand(act, args)
+	case act == "open":
+		return tabOpen(os.Stdout, args)
+	}
+	return unknownAction("tab", act)
+}
+
+func group(args []string) error {
+	act, args, err := action("group", args)
+	switch {
+	case err != nil || act == "":
+		return err
+	case act == "list":
+		return groupList(os.Stdout, args)
+	case act == "activate":
+		return groupActivate(os.Stdout, args)
+	case act == "add":
+		return groupAdd(os.Stdout, args)
+	}
+	return unknownAction("group", act)
 }
 
 // host runs the native messaging host for the browser that started it, its

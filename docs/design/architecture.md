@@ -65,8 +65,7 @@ every host, with no registry to keep in step.
 **Fan-out.** `tab list` and `group list` ask every host at once, and print what
 answered, with a warning for each host that did not. `group activate` asks
 every host for its groups, then sends the command to the one profile that
-holds the group, or that the window names. `group add` asks no other host: it
-goes to the profile its tab id names, as `tab activate` does.
+holds the group, or that the window names.
 
 ## Two protocols
 

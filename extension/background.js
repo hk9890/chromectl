@@ -78,12 +78,12 @@ function pageOf(tabs, given) {
 
 // groupTitled returns the group titled title with its tabs, the one with the
 // most recently accessed tab where several share the title, or undefined.
-async function groupTitled(title) {
-  const { groups, members } = await groupedTabs();
+// fits leaves out the groups whose tabs cannot take part.
+function groupTitled({ groups, members }, title, fits = () => true) {
   const found = groups
     .filter((g) => g.title === title)
     .map((g) => ({ group: g, tabs: members.get(g.id) }))
-    .filter((g) => g.tabs.length > 0);
+    .filter((g) => g.tabs.length > 0 && fits(g.tabs));
   if (found.length === 0) return undefined;
   return found.reduce((a, b) => (lastAccessed(b.tabs) > lastAccessed(a.tabs) ? b : a));
 }
@@ -98,7 +98,7 @@ async function newGroup(tab, title) {
 // raiseGroup raises the group titled title, or creates it with url in
 // window, else in the last focused normal window, else in a new one.
 async function raiseGroup({ title, url, window: windowId }) {
-  const found = await groupTitled(title);
+  const found = groupTitled(await groupedTabs(), title);
   if (found) {
     const { group, tabs: inGroup } = found;
     const tab = pageOf(inGroup, url);
@@ -121,18 +121,19 @@ async function raiseGroup({ title, url, window: windowId }) {
 
 // addToGroup puts the tab in the group titled title, or in a new group with
 // that title in the tab's window. A tab whose own group has the title stays.
+// Chrome cannot move a tab between an incognito window and a normal one, so a
+// group on the other side is not a candidate.
 async function addToGroup({ id, title }) {
-  const tab = await chrome.tabs.get(id);
-  if (tab.groupId !== -1 && (await tabGroups().get(tab.groupId)).title === title) {
+  const [tab, grouped] = await Promise.all([chrome.tabs.get(id), groupedTabs()]);
+  if (grouped.groups.find((g) => g.id === tab.groupId)?.title === title) {
     return { id, window: tab.windowId, group: tab.groupId, created: false };
   }
-  const found = await groupTitled(title);
+  const found = groupTitled(grouped, title, (tabs) => tabs[0].incognito === tab.incognito);
   if (!found) {
     return { id, window: tab.windowId, group: await newGroup(tab, title), created: true };
   }
   const group = await chrome.tabs.group({ tabIds: [id], groupId: found.group.id });
-  const moved = await chrome.tabs.get(id);
-  return { id, window: moved.windowId, group, created: false };
+  return { id, window: found.group.windowId, group, created: false };
 }
 
 // Two calls for one title that overlapped would each find no group and each

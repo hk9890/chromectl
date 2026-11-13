@@ -182,15 +182,21 @@ func tabCommand(cmd string, args []string) error {
 	if f.NArg() != 1 {
 		return badUsage("tab %s takes exactly one tab id", cmd)
 	}
-	profile, id, err := parseID("tab", f.Arg(0))
-	if err != nil {
-		return err
+	_, err := callTab(f.Arg(0), proto.Request{Cmd: cmd}, nil)
+	return err
+}
+
+// callTab sends req for the tab id arg names to the host of its profile, and
+// returns that profile.
+func callTab(arg string, req proto.Request, out any) (profile string, err error) {
+	if profile, req.Tab, err = parseID("tab", arg); err != nil {
+		return "", err
 	}
 	hs, err := hosts()
 	if err != nil {
-		return err
+		return "", err
 	}
-	return callProfile(hs, profile, proto.Request{Cmd: cmd, Tab: id}, nil)
+	return profile, callProfile(hs, profile, req, out)
 }
 
 // hostAnswer is one host's result to a request every host was asked.
@@ -484,16 +490,9 @@ func groupAdd(w io.Writer, args []string) error {
 	if f.Arg(0) == "" {
 		return badUsage("group add needs a title that is not empty")
 	}
-	profile, id, err := parseID("tab", f.Arg(1))
-	if err != nil {
-		return err
-	}
-	hs, err := hosts()
-	if err != nil {
-		return err
-	}
 	var grouped proto.Grouped
-	if err := callProfile(hs, profile, proto.Request{Cmd: "add-to-group", Tab: id, Title: f.Arg(0)}, &grouped); err != nil {
+	profile, err := callTab(f.Arg(1), proto.Request{Cmd: "add-to-group", Title: f.Arg(0)}, &grouped)
+	if err != nil {
 		return err
 	}
 	tab, window, group := composite(profile, grouped.ID), composite(profile, grouped.Window), composite(profile, grouped.Group)

@@ -70,6 +70,10 @@ for args, code, out, err in cases:
 r = cli(["list"])
 print("$ chromectl list ->", r.returncode, repr(r.stderr[:40]), flush=True)
 if r.returncode != 2 or not r.stderr.startswith('chromectl: unknown command "list"\n'): fail("want unknown command, exit 2")
+# A command and its action are two arguments; one argument that holds both is no command.
+r = cli(["tab list"])
+print("$ chromectl 'tab list' ->", r.returncode, flush=True)
+if r.returncode != 2: fail("want unknown command, exit 2")
 t.join(timeout=5)
 if len(served) != 10: fail("the extension answered %d of ten requests" % len(served))
 p.stdin.close()

@@ -498,6 +498,25 @@ func TestGroupAddGoesToTheTabsProfile(t *testing.T) {
 	}
 }
 
+// An object needs an action it has; the error names the actions it has. A
+// two-word argument is not a command and its action.
+func TestAnObjectNeedsOneOfItsActions(t *testing.T) {
+	for _, c := range []struct {
+		run  func([]string) error
+		args []string
+		want string
+	}{
+		{tab, nil, "tab needs an action: list, activate, open, close"},
+		{group, nil, "group needs an action: list, activate, add"},
+		{group, []string{"groups"}, `unknown command "group groups"; the group actions are list, activate, add`},
+		{tab, []string{"list x"}, `unknown command "tab list x"; the tab actions are list, activate, open, close`},
+	} {
+		if err := c.run(c.args); err == nil || err.Error() != c.want || exitCode(err) != 2 {
+			t.Errorf("%q: err = %v", c.args, err)
+		}
+	}
+}
+
 func TestGroupAddNeedsATitleAndATabID(t *testing.T) {
 	runtimeDir(t)
 	for _, args := range [][]string{{"", "aaaa0001:4"}, {"chromectl", "4"}, {"chromectl"}, {"chromectl", "aaaa0001:4", "extra"}} {

@@ -45,7 +45,7 @@ them. Git's rule holds because objects are never removed; hosts come and go.
 An id printed while two profiles ran could name a different profile after one
 stopped.
 
-**A `--profile` flag on `open`.** A second way to choose the host. The window
+**A `--profile` flag on `tab open`.** A second way to choose the host. The window
 id already names its profile, and both need a `list` to learn the value.
 
 **The host learns its profile from the CLI's question.** The socket named only
@@ -61,7 +61,7 @@ shows the name alone, and the extension cannot read that name either. The tab
 title is what Chrome says, so chromectl prints that, and the caller, which
 knows its browser, adds the suffix.
 
-**A window type in `list`.** Each tab would carry its window's type, so a
+**A window type in `tab list`.** Each tab would carry its window's type, so a
 caller that matches by URL could skip the tabs of `--app` windows. Rejected for
 now: the planned consumer, revier's project key, addresses groups, and a group
 cannot live in an `--app` window, so nothing would read the field. It is one
@@ -72,9 +72,9 @@ with a prefix, or open the URL. Rejected: it makes chromectl the judge of when
 a page is open, which is the matcher [product.md](product.md#model) leaves to
 the caller.
 
-**`open --group` and a raise-only `activate-group`.** `open --group <title>
-<url>` would open a tab straight into a group, creating it if needed, and an
-`activate-group <title>` without a URL would raise a group or fail. Rejected:
+**`tab open --group` and a raise-only `group activate`.** `tab open --group
+<title> <url>` would open a tab straight into a group, creating it if needed,
+and a `group activate <title>` without a URL would raise a group or fail. Rejected:
 `group activate <title> <url>` opens into a group when it creates one, and
 `group add` puts any tab, a new one included, into a group, so a flag on
 `tab open` would be a second way to do the same. A raise that can fail on a
