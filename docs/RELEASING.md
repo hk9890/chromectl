@@ -24,7 +24,7 @@ tests, and publishes with GoReleaser (`.goreleaser.yaml`).
 
 4. Check the build on the live Chrome ([RUNNING.md](RUNNING.md)): run
    `mise run install`, the user reloads the chromectl card, then
-   `./bin/chromectl list` answers. The Go tests cannot see the extension.
+   `./bin/chromectl tab list` answers. The Go tests cannot see the extension.
 5. Tag and push as a repository admin; the `v*` tag ruleset rejects a tag
    created, moved or deleted by anyone else.
 

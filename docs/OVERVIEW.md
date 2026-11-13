@@ -8,9 +8,9 @@ structural choice follows from: only the extension can open a connection, so
 the CLI talks to the host Chrome already started, never to Chrome.
 
 ```
-chromectl list ──unix socket──▶ chromectl host ◀──stdin/stdout──▶ extension ──▶ chrome.tabs
-                $XDG_RUNTIME_DIR/chromectl/       native messaging
-                one socket per profile
+chromectl tab list ──unix socket──▶ chromectl host ◀──stdin/stdout──▶ extension ──▶ chrome.tabs
+                    $XDG_RUNTIME_DIR/chromectl/       native messaging
+                    one socket per profile
 ```
 
 ## Layout

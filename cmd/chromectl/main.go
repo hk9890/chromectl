@@ -24,29 +24,37 @@ import (
 
 const usage = `usage: chromectl <command> [args]
 
-  list [--json]                every tab of every profile: id, window, group,
+  tab list [--json]            every tab of every profile: id, window, group,
                                active, browser, title, url (tab-separated, or a
                                JSON array)
-  groups [--json]              every open tab group: id, window, title
-  activate <tab-id>            activate the tab and focus its window
-  activate-group [--json] <title> <url> [window]
+  tab activate <tab-id>        activate the tab and focus its window
+  tab open [--json] <url> [window]
+                               open url in a new tab, in the given window or the
+                               last focused one; prints its id and window
+  tab close <tab-id>           close the tab
+
+  group list [--json]          every open tab group: id, window, title
+  group activate [--json] <title> <url> [window]
                                raise the tab group titled title: activate its tab
                                at url, else under url, else its last used tab.
                                Without such a group, open url in a new group with
                                that title, in the given window or the last
                                focused one. Prints the tab's id, its window,
                                whether the group was created, and the tab's title
-  open [--json] <url> [window] open url in a new tab, in the given window or the
-                               last focused one; prints its id and window
-  close <tab-id>               close the tab
+  group add [--json] <title> <tab-id>
+                               put the tab in the tab group titled title, or in a
+                               new group with that title in the tab's window.
+                               Prints the tab's id, its window, the group's id,
+                               and whether the group was created
+
   install                      copy this binary and the extension to ~/.local/share/chromectl
                                and register that copy as the native messaging host
   version                      print the version
   host                         the native messaging host; Chrome starts this, not you
 
-Tab, window and group ids are <profile>:<number>, as list prints them. With
-several profiles, open, and activate-group where it creates a group, need a
-window id.
+Tab, window and group ids are <profile>:<number>, as tab list prints them.
+With several profiles, tab open, and group activate where it creates a group,
+need a window id.
 
 Every command that calls Chrome takes --timeout <duration> (default 5s) before
 its arguments. Exit codes: 1 an error from Chrome or chromectl, 2 bad usage,
@@ -64,20 +72,25 @@ func main() {
 	if strings.HasPrefix(cmd, "chrome-extension://") {
 		cmd = "host"
 	}
+	if (cmd == "tab" || cmd == "group") && len(args) > 0 {
+		cmd, args = cmd+" "+args[0], args[1:]
+	}
 	var err error
 	switch cmd {
-	case "list":
-		err = list(os.Stdout, args)
-	case "activate":
+	case "tab list":
+		err = tabList(os.Stdout, args)
+	case "tab activate":
 		err = tabCommand("activate", args)
-	case "close":
+	case "tab open":
+		err = tabOpen(os.Stdout, args)
+	case "tab close":
 		err = tabCommand("close", args)
-	case "groups":
-		err = groups(os.Stdout, args)
-	case "activate-group":
-		err = activateGroup(os.Stdout, args)
-	case "open":
-		err = open(os.Stdout, args)
+	case "group list":
+		err = groupList(os.Stdout, args)
+	case "group activate":
+		err = groupActivate(os.Stdout, args)
+	case "group add":
+		err = groupAdd(os.Stdout, args)
 	case "install":
 		err = install(args)
 	case "host":

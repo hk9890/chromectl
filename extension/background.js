@@ -76,17 +76,31 @@ function pageOf(tabs, given) {
   return mostRecent(at.length ? at : under.length ? under : tabs);
 }
 
-// raiseGroup raises the group titled title, the one with the most recently
-// accessed tab where several share the title, or creates it with url in
-// window, else in the last focused normal window, else in a new one.
-async function raiseGroup({ title, url, window: windowId }) {
+// groupTitled returns the group titled title with its tabs, the one with the
+// most recently accessed tab where several share the title, or undefined.
+async function groupTitled(title) {
   const { groups, members } = await groupedTabs();
   const found = groups
     .filter((g) => g.title === title)
     .map((g) => ({ group: g, tabs: members.get(g.id) }))
     .filter((g) => g.tabs.length > 0);
-  if (found.length > 0) {
-    const { group, tabs: inGroup } = found.reduce((a, b) => (lastAccessed(b.tabs) > lastAccessed(a.tabs) ? b : a));
+  if (found.length === 0) return undefined;
+  return found.reduce((a, b) => (lastAccessed(b.tabs) > lastAccessed(a.tabs) ? b : a));
+}
+
+// newGroup puts tab in a new group of its window and gives the group title.
+async function newGroup(tab, title) {
+  const group = await chrome.tabs.group({ tabIds: [tab.id], createProperties: { windowId: tab.windowId } });
+  await tabGroups().update(group, { title });
+  return group;
+}
+
+// raiseGroup raises the group titled title, or creates it with url in
+// window, else in the last focused normal window, else in a new one.
+async function raiseGroup({ title, url, window: windowId }) {
+  const found = await groupTitled(title);
+  if (found) {
+    const { group, tabs: inGroup } = found;
     const tab = pageOf(inGroup, url);
     await tabGroups().update(group.id, { collapsed: false });
     await chrome.tabs.update(tab.id, { active: true });
@@ -100,15 +114,36 @@ async function raiseGroup({ title, url, window: windowId }) {
   const tab = windowId
     ? await chrome.tabs.create({ url, windowId, active: true })
     : (await chrome.windows.create({ url, type: "normal", focused: true })).tabs[0];
-  const group = await chrome.tabs.group({ tabIds: [tab.id], createProperties: { windowId: tab.windowId } });
-  await tabGroups().update(group, { title });
+  await newGroup(tab, title);
   await chrome.windows.update(tab.windowId, { focused: true });
   return { id: tab.id, window: tab.windowId, created: true, title: tab.title ?? "" };
 }
 
-// Two activate-group calls for one title that overlapped would each find no
-// group and each create one, so they run one after the other.
-let raising = Promise.resolve();
+// addToGroup puts the tab in the group titled title, or in a new group with
+// that title in the tab's window. A tab whose own group has the title stays.
+async function addToGroup({ id, title }) {
+  const tab = await chrome.tabs.get(id);
+  if (tab.groupId !== -1 && (await tabGroups().get(tab.groupId)).title === title) {
+    return { id, window: tab.windowId, group: tab.groupId, created: false };
+  }
+  const found = await groupTitled(title);
+  if (!found) {
+    return { id, window: tab.windowId, group: await newGroup(tab, title), created: true };
+  }
+  const group = await chrome.tabs.group({ tabIds: [id], groupId: found.group.id });
+  const moved = await chrome.tabs.get(id);
+  return { id, window: moved.windowId, group, created: false };
+}
+
+// Two calls for one title that overlapped would each find no group and each
+// create one, so every call that may create a group waits for the one before.
+let grouping = Promise.resolve();
+
+function inTurn(work) {
+  const done = grouping.then(work);
+  grouping = done.catch(() => {});
+  return done;
+}
 
 const commands = {
   async identify() {
@@ -157,9 +192,11 @@ const commands = {
   },
 
   async "activate-group"(req) {
-    const raised = raising.then(() => raiseGroup(req));
-    raising = raised.catch(() => {});
-    return raised;
+    return inTurn(() => raiseGroup(req));
+  },
+
+  async "add-to-group"(req) {
+    return inTurn(() => addToGroup(req));
   },
 };
 

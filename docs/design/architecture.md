@@ -14,9 +14,9 @@ Every structural choice below follows from this one fact.
 ## Three processes
 
 ```
-chromectl list ──unix socket──▶ chromectl host ◀──stdin/stdout──▶ extension ──▶ chrome.tabs, chrome.tabGroups
-                $XDG_RUNTIME_DIR/chromectl/       native messaging
-                one socket per host
+chromectl tab list ──unix socket──▶ chromectl host ◀──stdin/stdout──▶ extension ──▶ chrome.tabs, chrome.tabGroups
+                    $XDG_RUNTIME_DIR/chromectl/       native messaging
+                    one socket per host
 ```
 
 | Process | Started by | Lives until | Holds |
@@ -62,10 +62,11 @@ every host, with no registry to keep in step.
   answers every call with the reason. Exiting would start a reconnect loop,
   and the reason would reach only Chrome's stderr.
 
-**Fan-out.** `list` and `groups` ask every host at once, and print what
-answered, with a warning for each host that did not. `activate-group` asks
+**Fan-out.** `tab list` and `group list` ask every host at once, and print what
+answered, with a warning for each host that did not. `group activate` asks
 every host for its groups, then sends the command to the one profile that
-holds the group, or that the window names.
+holds the group, or that the window names. `group add` asks no other host: it
+goes to the profile its tab id names, as `tab activate` does.
 
 ## Two protocols
 
@@ -78,8 +79,8 @@ the arguments of the tabs API call, and a tab id named anything but `id` would
 be a translation layer for no gain. `id` is always sent: Chrome reads a
 missing tab id as the current tab. `title` is a group's title. It is the one
 field the extension does not hand to Chrome as is: `tabGroups.query` reads a
-title as a pattern, where `*` and `?` are wildcards, so `activate-group`
-queries every group and compares each title itself. The host sends one request
+title as a pattern, where `*` and `?` are wildcards, so `group activate` and
+`group add` query every group and compare each title themselves. The host sends one request
 of its own, `identify`, answered with `{profile}`.
 
 **CLI to host** is one JSON line each way over a Unix socket, then close. A
@@ -113,15 +114,16 @@ Chrome that shuts down from a host that crashed mid-call.
 ## Concurrency in the extension
 
 The extension answers each request as its own async call, so a slow one never
-holds the others. `activate-group` is the exception: its calls run one at a
-time, chained on one promise. Each reads the groups, then writes in several
+holds the others. `group activate` and `group add` are the exception: their
+calls run one at a time, chained on one promise. Each reads the groups, then writes in several
 calls, and two calls for the same title that overlapped would each see no
 group and each create one. The cost: a Chrome call that never settles holds
-every later `activate-group` behind it until the worker restarts. Each of those
+every later `group activate` and `group add` behind it until the worker
+restarts. Each of those
 calls ends at its deadline, so the user sees the failure, and a reload of the
 extension clears it. The chain is per profile; two calls the CLI sends to two
 profiles cannot race for one group, because the CLI creates a group only in
-the profile the window names, or the one that runs.
+the profile the window or the tab names, or the one that runs.
 
 ## Concurrency in the host
 
