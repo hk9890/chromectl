@@ -10,7 +10,7 @@ every command is a one-shot client of that host over a Unix socket. There is no
 daemon to start or enable.
 
 ```
-chromectl tab list                   # id  window  group  active  browser  title  url
+chromectl tab list                   # id  window  group  active  browser  windowType  lastAccessed  title  url
 chromectl tab activate <tab-id>      # activate the tab and focus its window
 chromectl tab open <url> [window]    # open a new tab, in that window or the last focused one
 chromectl tab close <tab-id>
@@ -22,7 +22,8 @@ chromectl group add <title> <tab-id> # put the tab in the group with that title,
 ```
 
 `tab list --json` prints a JSON array of
-`{id, window, group, active, browser, profile, title, url}`; `group list --json`
+`{id, window, group, active, browser, profile, windowType, lastAccessed, title, url}`;
+`group list --json`
 `{id, window, title}`; `tab open --json <url>` prints `{id, window}`,
 `group activate --json` `{id, window, created, title}`, and `group add --json`
 `{id, window, group, created}`. Put `--json` before the

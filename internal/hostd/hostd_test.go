@@ -252,7 +252,7 @@ func TestListReachesTheExtensionAndComesBack(t *testing.T) {
 		if req.Cmd != "list" {
 			t.Errorf("cmd = %q", req.Cmd)
 		}
-		res, _ := json.Marshal([]proto.Tab{{ID: 4, Window: 1, Active: true, Title: "PRs", URL: "https://github.com/pulls"}})
+		res, _ := json.Marshal([]proto.Tab{{ID: 4, Window: 1, WindowType: "app", Active: true, LastAccessed: 1761900000000.5, Title: "PRs", URL: "https://github.com/pulls"}})
 		return proto.Reply{Result: res}
 	})
 	defer done()
@@ -261,7 +261,7 @@ func TestListReachesTheExtensionAndComesBack(t *testing.T) {
 	if err := client.Call(socket, proto.Request{Cmd: "list"}, &tabs); err != nil {
 		t.Fatal(err)
 	}
-	if len(tabs) != 1 || tabs[0].URL != "https://github.com/pulls" || !tabs[0].Active {
+	if len(tabs) != 1 || tabs[0].URL != "https://github.com/pulls" || !tabs[0].Active || tabs[0].WindowType != "app" || tabs[0].LastAccessed != 1761900000000.5 {
 		t.Fatalf("tabs = %+v", tabs)
 	}
 }

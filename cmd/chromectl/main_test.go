@@ -121,15 +121,15 @@ func TestParseIDReadsTheFormTabListPrints(t *testing.T) {
 
 func TestListShowsEveryProfile(t *testing.T) {
 	runtimeDir(t)
-	startHost(t, "aaaa0001", "chrome", 1, []proto.Tab{{ID: 4, Window: 1, Group: 7, Active: true, Title: "PRs", URL: "https://github.com/pulls"}}, nil)
+	startHost(t, "aaaa0001", "chrome", 1, []proto.Tab{{ID: 4, Window: 1, WindowType: "normal", Group: 7, Active: true, LastAccessed: 1761900000000.5, Title: "PRs", URL: "https://github.com/pulls"}}, nil)
 	startHost(t, "bbbb0002", "brave", 2, []proto.Tab{{ID: 4, Window: 3, Group: -1, Title: "News", URL: "https://orf.at"}}, nil)
 
 	var out bytes.Buffer
 	if err := tabList(&out, nil); err != nil {
 		t.Fatal(err)
 	}
-	want := "aaaa0001:4\taaaa0001:1\taaaa0001:7\t*\tchrome\tPRs\thttps://github.com/pulls\n" +
-		"bbbb0002:4\tbbbb0002:3\t-\t-\tbrave\tNews\thttps://orf.at\n"
+	want := "aaaa0001:4\taaaa0001:1\taaaa0001:7\t*\tchrome\tnormal\t1761900000000\tPRs\thttps://github.com/pulls\n" +
+		"bbbb0002:4\tbbbb0002:3\t-\t-\tbrave\t-\t-\tNews\thttps://orf.at\n"
 	if out.String() != want {
 		t.Fatalf("list =\n%s\nwant\n%s", out.String(), want)
 	}
@@ -142,10 +142,10 @@ func TestListShowsEveryProfile(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &rows); err != nil || len(rows) != 2 {
 		t.Fatalf("list --json = %s, %v", out.String(), err)
 	}
-	if r := rows[1]; r["id"] != "bbbb0002:4" || r["window"] != "bbbb0002:3" || r["group"] != "" || r["browser"] != "brave" || r["profile"] != "bbbb0002" {
+	if r := rows[1]; r["id"] != "bbbb0002:4" || r["window"] != "bbbb0002:3" || r["group"] != "" || r["windowType"] != "" || r["lastAccessed"] != 0.0 || r["browser"] != "brave" || r["profile"] != "bbbb0002" {
 		t.Fatalf("row = %v", r)
 	}
-	if r := rows[0]; r["group"] != "aaaa0001:7" {
+	if r := rows[0]; r["group"] != "aaaa0001:7" || r["windowType"] != "normal" || r["lastAccessed"] != 1761900000000.0 {
 		t.Fatalf("row = %v", r)
 	}
 }

@@ -152,15 +152,20 @@ const commands = {
   },
 
   async list() {
-    const tabs = await chrome.tabs.query({});
-    return tabs.map((t) => ({
-      id: t.id,
-      window: t.windowId,
-      group: t.groupId,
-      active: t.active,
-      title: t.title ?? "",
-      url: t.url ?? "",
-    }));
+    // One call gives every tab with its window's type, in one snapshot.
+    const windows = await chrome.windows.getAll({ populate: true, windowTypes: ["normal", "popup", "app", "devtools"] });
+    return windows.flatMap((w) =>
+      w.tabs.map((t) => ({
+        id: t.id,
+        window: t.windowId,
+        group: t.groupId,
+        active: t.active,
+        windowType: w.type,
+        lastAccessed: t.lastAccessed ?? 0,
+        title: t.title ?? "",
+        url: t.url ?? "",
+      })),
+    );
   },
 
   async activate({ id }) {
