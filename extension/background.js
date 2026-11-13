@@ -5,6 +5,30 @@
 
 const HOST = "com.hk9890.chromectl";
 const RECONNECT_MS = 2000;
+// Every window type that can hold a tab. Chrome's window events report only
+// normal and popup windows unless asked for more.
+const WINDOW_TYPES = ["normal", "popup", "app"];
+
+// focusedAt maps a window id to when the window last got the focus, in
+// milliseconds since the epoch. It lives only in memory: a new worker starts
+// with it empty, because keeping it would need the storage permission.
+const focusedAt = new Map();
+
+chrome.windows.onFocusChanged.addListener(
+  (id) => {
+    if (id !== chrome.windows.WINDOW_ID_NONE) focusedAt.set(id, Date.now());
+  },
+  { windowTypes: WINDOW_TYPES },
+);
+chrome.windows.onRemoved.addListener((id) => focusedAt.delete(id), { windowTypes: WINDOW_TYPES });
+// A window that has the focus while the worker starts got it no later than
+// now; one in a Chrome that is in the background stays unknown.
+chrome.windows.getLastFocused().then(
+  (w) => {
+    if (w.focused && !focusedAt.has(w.id)) focusedAt.set(w.id, Date.now());
+  },
+  () => {},
+);
 
 // profileId returns this profile's id, 8 hex digits, made on the first call
 // and kept in IndexedDB: every profile has its own, clearing browsing data
@@ -153,7 +177,7 @@ const commands = {
 
   async list() {
     // One call gives every tab with its window's type, in one snapshot.
-    const windows = await chrome.windows.getAll({ populate: true, windowTypes: ["normal", "popup", "app"] });
+    const windows = await chrome.windows.getAll({ populate: true, windowTypes: WINDOW_TYPES });
     return windows.flatMap((w) =>
       w.tabs.map((t) => ({
         id: t.id,
@@ -162,6 +186,7 @@ const commands = {
         active: t.active,
         windowType: w.type,
         lastAccessed: t.lastAccessed ?? 0,
+        windowFocusedAt: focusedAt.get(w.id) ?? 0,
         title: t.title ?? "",
         url: t.url ?? "",
       })),

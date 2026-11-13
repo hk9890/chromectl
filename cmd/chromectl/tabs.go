@@ -261,30 +261,32 @@ func tabList(w io.Writer, args []string) error {
 	}
 
 	type row struct {
-		ID           string `json:"id"`
-		Window       string `json:"window"`
-		Group        string `json:"group"`
-		Active       bool   `json:"active"`
-		Browser      string `json:"browser"`
-		Profile      string `json:"profile"`
-		WindowType   string `json:"windowType"`
-		LastAccessed int64  `json:"lastAccessed"`
-		Title        string `json:"title"`
-		URL          string `json:"url"`
+		ID              string `json:"id"`
+		Window          string `json:"window"`
+		Group           string `json:"group"`
+		Active          bool   `json:"active"`
+		Browser         string `json:"browser"`
+		Profile         string `json:"profile"`
+		WindowType      string `json:"windowType"`
+		LastAccessed    int64  `json:"lastAccessed"`
+		WindowFocusedAt int64  `json:"windowFocusedAt"`
+		Title           string `json:"title"`
+		URL             string `json:"url"`
 	}
 	rows := []row{}
 	for _, a := range answers {
 		for _, t := range a.result {
 			r := row{
-				ID:           composite(a.host.Profile, t.ID),
-				Window:       composite(a.host.Profile, t.Window),
-				WindowType:   t.WindowType,
-				Active:       t.Active,
-				LastAccessed: int64(t.LastAccessed),
-				Browser:      a.host.Browser,
-				Profile:      a.host.Profile,
-				Title:        t.Title,
-				URL:          t.URL,
+				ID:              composite(a.host.Profile, t.ID),
+				Window:          composite(a.host.Profile, t.Window),
+				WindowType:      t.WindowType,
+				Active:          t.Active,
+				LastAccessed:    int64(t.LastAccessed),
+				WindowFocusedAt: int64(t.WindowFocusedAt),
+				Browser:         a.host.Browser,
+				Profile:         a.host.Profile,
+				Title:           t.Title,
+				URL:             t.URL,
 			}
 			if t.Group > 0 {
 				r.Group = composite(a.host.Profile, t.Group)
@@ -296,14 +298,11 @@ func tabList(w io.Writer, args []string) error {
 		err = printJSON(w, rows)
 	} else {
 		for _, r := range rows {
-			active, lastAccessed := "-", "-"
+			active := "-"
 			if r.Active {
 				active = "*"
 			}
-			if r.LastAccessed > 0 {
-				lastAccessed = strconv.FormatInt(r.LastAccessed, 10)
-			}
-			if _, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, r.Window, orDash(r.Group), active, r.Browser, orDash(r.WindowType), lastAccessed, r.Title, r.URL); err != nil {
+			if _, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, r.Window, orDash(r.Group), active, r.Browser, orDash(r.WindowType), millisOrDash(r.LastAccessed), millisOrDash(r.WindowFocusedAt), r.Title, r.URL); err != nil {
 				break
 			}
 		}
@@ -312,6 +311,15 @@ func tabList(w io.Writer, args []string) error {
 		err = incompleteError{"tab list", failures[0]}
 	}
 	return err
+}
+
+// millisOrDash is ms in decimal, or "-" for 0, a time the extension does not
+// know.
+func millisOrDash(ms int64) string {
+	if ms == 0 {
+		return "-"
+	}
+	return strconv.FormatInt(ms, 10)
 }
 
 // orDash is s, or "-" for an empty s, so a tab-separated column is never empty.

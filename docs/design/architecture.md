@@ -21,7 +21,7 @@ chromectl tab list ──unix socket──▶ chromectl host ◀──stdin/stdo
 
 | Process | Started by | Lives until | Holds |
 |---|---|---|---|
-| Extension service worker | Chrome, on profile start: the worker listens for `runtime.onStartup`, and Chrome starts an MV3 worker at browser start only for a worker that does | Chrome exits. An open native port keeps an MV3 worker alive, so no keepalive tick is needed. | The one port to the host, and the profile id |
+| Extension service worker | Chrome, on profile start: the worker listens for `runtime.onStartup`, and Chrome starts an MV3 worker at browser start only for a worker that does | Chrome exits. An open native port keeps an MV3 worker alive, so no keepalive tick is needed. | The one port to the host, the profile id, and when each window last got the focus |
 | `chromectl host` | Chrome, when the worker connects | Chrome closes the pipe. It removes its socket at that moment, then has one second to write the last replies. | The socket listener, the pending map, its profile id |
 | `chromectl <cmd>` | The user or a caller | One reply from each host it asks | Nothing |
 

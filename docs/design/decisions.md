@@ -86,6 +86,12 @@ it from Chrome's own error and keep the text "chrome went away". Rejected:
 closing the connection without a reply says the same thing with no new field,
 and the CLI already has to handle a connection that closes early.
 
+**Window focus times in `chrome.storage.session`.** The times `windowFocusedAt`
+reports would survive a restart of the worker. Rejected: the storage API needs
+the `storage` permission, and the open native port keeps the worker alive
+while Chrome runs, so the times are lost only when the extension reloads or
+Chrome restarts, and then the windows they named are gone or renumbered too.
+
 ## Superseded
 
 These held in v0.1.0 and were replaced when chromectl gave every profile its
