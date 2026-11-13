@@ -127,7 +127,7 @@ split and never parses prose.
 `group` is the id of the tab's group, `-` in tab-separated output and `""` in
 JSON for a tab in no group, and for every tab of an extension older than
 groups. `windowType` is Chrome's type of the tab's window: `normal`, `app`
-for an `--app` window or an installed web app, `popup`, and so on.
+for an `--app` window or an installed web app, or `popup`.
 `lastAccessed` is when the tab last became active in its window, in whole
 milliseconds since the epoch, so a caller that finds several tabs on its URL
 can take the most recent, the choice `group activate` makes. Focusing another

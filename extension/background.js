@@ -153,7 +153,7 @@ const commands = {
 
   async list() {
     // One call gives every tab with its window's type, in one snapshot.
-    const windows = await chrome.windows.getAll({ populate: true, windowTypes: ["normal", "popup", "app", "devtools"] });
+    const windows = await chrome.windows.getAll({ populate: true, windowTypes: ["normal", "popup", "app"] });
     return windows.flatMap((w) =>
       w.tabs.map((t) => ({
         id: t.id,
