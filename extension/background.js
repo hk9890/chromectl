@@ -23,7 +23,7 @@ chrome.windows.onFocusChanged.addListener(
 chrome.windows.onRemoved.addListener((id) => focusedAt.delete(id), { windowTypes: WINDOW_TYPES });
 // A window that has the focus while the worker starts got it no later than
 // now; one in a Chrome that is in the background stays unknown.
-chrome.windows.getLastFocused().then(
+chrome.windows.getLastFocused({ windowTypes: WINDOW_TYPES }).then(
   (w) => {
     if (w.focused && !focusedAt.has(w.id)) focusedAt.set(w.id, Date.now());
   },
