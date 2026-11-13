@@ -152,12 +152,18 @@ const commands = {
   },
 
   async list() {
-    const tabs = await chrome.tabs.query({});
+    const [tabs, windows] = await Promise.all([
+      chrome.tabs.query({}),
+      chrome.windows.getAll({ windowTypes: ["normal", "popup", "panel", "app", "devtools"] }),
+    ]);
+    const windowTypes = new Map(windows.map((w) => [w.id, w.type]));
     return tabs.map((t) => ({
       id: t.id,
       window: t.windowId,
+      windowType: windowTypes.get(t.windowId) ?? "",
       group: t.groupId,
       active: t.active,
+      lastAccessed: t.lastAccessed ?? 0,
       title: t.title ?? "",
       url: t.url ?? "",
     }));

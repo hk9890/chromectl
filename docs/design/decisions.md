@@ -61,12 +61,6 @@ shows the name alone, and the extension cannot read that name either. The tab
 title is what Chrome says, so chromectl prints that, and the caller, which
 knows its browser, adds the suffix.
 
-**A window type in `tab list`.** Each tab would carry its window's type, so a
-caller that matches by URL could skip the tabs of `--app` windows. Rejected for
-now: the planned consumer, revier's project key, addresses groups, and a group
-cannot live in an `--app` window, so nothing would read the field. It is one
-more Chrome call when a consumer needs it.
-
 **Open-or-activate by URL prefix.** One call would find a tab whose URL starts
 with a prefix, or open the URL. Rejected: it makes chromectl the judge of when
 a page is open, which is the matcher [product.md](product.md#model) leaves to
@@ -154,3 +148,13 @@ then the action. The old names were dropped with no alias.
 group was out until a consumer asked. It is one Chrome call on a permission
 chromectl already holds, and it completes the group commands, so it went in
 without one.
+
+These were replaced when the consumer moved from groups to matching by URL.
+
+**No window type in `tab list`.** Rejected while the planned consumer,
+revier's project key, addressed groups: a group cannot live in an `--app`
+window, so nothing would have read the field. The key now lists tabs and
+matches their URL, and an `--app` window can hold a tab on the project's URL.
+Its window shows no browser suffix, so a caller that raises the window by its
+title cannot find it. `tab list` now carries the window's type, at the cost of
+one more Chrome call per list, so the caller can skip such a tab.

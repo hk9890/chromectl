@@ -117,7 +117,7 @@ split and never parses prose.
 
 | Command | Prints, tab-separated | `--json` |
 |---|---|---|
-| `tab list` | `id window group active browser title url` per tab | array of `{id, window, group, active, browser, profile, title, url}` |
+| `tab list` | `id window windowType group active lastAccessed browser title url` per tab | array of `{id, window, windowType, group, active, lastAccessed, browser, profile, title, url}` |
 | `group list` | `id window title` per open group | array of `{id, window, title}` |
 | `tab open <url> [window]` | `id window` | `{id, window}` |
 | `group activate <title> <url> [window]` | `id window created title` | `{id, window, created, title}` |
@@ -126,7 +126,13 @@ split and never parses prose.
 
 `group` is the id of the tab's group, `-` in tab-separated output and `""` in
 JSON for a tab in no group, and for every tab of an extension older than
-groups. `group activate` prints the tab it activated. `created` says whether it
+groups. `windowType` is Chrome's type of the tab's window: `normal`, `app`
+for an `--app` window, `popup`, and so on. `lastAccessed` is when the tab was
+last active, in whole milliseconds since the epoch, so a caller that finds
+several tabs on its URL can take the one the user used last, the choice
+`group activate` makes. An extension older than the two fields sends neither:
+`-` in tab-separated output, `""` and `0` in JSON. `group activate` prints the
+tab it activated. `created` says whether it
 made the group, and `title` is the tab's title, which is the text a normal
 Chrome window shows before its own suffix: what chromectl can give a caller
 that raises the window by its title. `group add` prints the tab it moved, the
