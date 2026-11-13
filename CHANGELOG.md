@@ -5,11 +5,11 @@
 **Action required:** after the upgrade, run `chromectl install`, then click
 reload on the chromectl card at `chrome://extensions` in every profile that
 loads it. Until then, `group add` answers "unknown command", and `tab list`
-shows `-` for the two new columns.
+shows `-` for the two new columns, and `--json` gives `""` and `0`.
 
 **Action required:** a script that calls chromectl must change:
 
-- Every command now names its object first: `list` is `tab list`, `activate`
+- Every tab and group command now names its object first: `list` is `tab list`, `activate`
   is `tab activate`, `open` is `tab open`, `close` is `tab close`, `groups`
   is `group list`, and `activate-group` is `group activate`. The old names
   are gone and exit 2.
