@@ -45,10 +45,10 @@ print("socket:", os.path.basename(sock), flush=True)
 browser = os.path.basename(sock).split(".")[1]
 url = "https://github.com/pulls?q=is%3Aopen&sort=updated"
 tab, window, group = profile + ":4", profile + ":1", profile + ":7"
-listed = json.dumps([{"id": tab, "window": window, "windowType": "normal", "group": group, "active": True, "lastAccessed": 1761900000000, "browser": browser, "profile": profile, "title": "Pull requests", "url": url}], separators=(",", ":"))
+listed = json.dumps([{"id": tab, "window": window, "group": group, "active": True, "browser": browser, "profile": profile, "windowType": "normal", "lastAccessed": 1761900000000, "title": "Pull requests", "url": url}], separators=(",", ":"))
 # Each case: the arguments, then the exit code, stdout and stderr the CLI must give.
 cases = (
-    (["tab", "list"], 0, "\t".join([tab, window, "normal", group, "*", "1761900000000", browser, "Pull requests", url]) + "\n", ""),
+    (["tab", "list"], 0, "\t".join([tab, window, group, "*", browser, "normal", "1761900000000", "Pull requests", url]) + "\n", ""),
     (["group", "list"], 0, "\t".join([group, window, "chromectl"]) + "\n", ""),
     (["group", "activate", "--timeout", "2s", "chromectl", "https://github.com/hk9890/chromectl"], 0, "\t".join([tab, window, "false", "Pull requests"]) + "\n", ""),
     (["group", "add", "chromectl", tab], 0, "\t".join([tab, window, group, "false"]) + "\n", ""),

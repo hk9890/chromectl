@@ -263,12 +263,12 @@ func tabList(w io.Writer, args []string) error {
 	type row struct {
 		ID           string `json:"id"`
 		Window       string `json:"window"`
-		WindowType   string `json:"windowType"`
 		Group        string `json:"group"`
 		Active       bool   `json:"active"`
-		LastAccessed int64  `json:"lastAccessed"`
 		Browser      string `json:"browser"`
 		Profile      string `json:"profile"`
+		WindowType   string `json:"windowType"`
+		LastAccessed int64  `json:"lastAccessed"`
 		Title        string `json:"title"`
 		URL          string `json:"url"`
 	}
@@ -303,7 +303,7 @@ func tabList(w io.Writer, args []string) error {
 			if r.LastAccessed > 0 {
 				lastAccessed = strconv.FormatInt(r.LastAccessed, 10)
 			}
-			if _, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, r.Window, orDash(r.WindowType), orDash(r.Group), active, lastAccessed, r.Browser, r.Title, r.URL); err != nil {
+			if _, err = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, r.Window, orDash(r.Group), active, r.Browser, orDash(r.WindowType), lastAccessed, r.Title, r.URL); err != nil {
 				break
 			}
 		}

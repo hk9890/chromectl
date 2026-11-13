@@ -117,7 +117,7 @@ split and never parses prose.
 
 | Command | Prints, tab-separated | `--json` |
 |---|---|---|
-| `tab list` | `id window windowType group active lastAccessed browser title url` per tab | array of `{id, window, windowType, group, active, lastAccessed, browser, profile, title, url}` |
+| `tab list` | `id window group active browser windowType lastAccessed title url` per tab | array of `{id, window, group, active, browser, profile, windowType, lastAccessed, title, url}` |
 | `group list` | `id window title` per open group | array of `{id, window, title}` |
 | `tab open <url> [window]` | `id window` | `{id, window}` |
 | `group activate <title> <url> [window]` | `id window created title` | `{id, window, created, title}` |
@@ -127,11 +127,14 @@ split and never parses prose.
 `group` is the id of the tab's group, `-` in tab-separated output and `""` in
 JSON for a tab in no group, and for every tab of an extension older than
 groups. `windowType` is Chrome's type of the tab's window: `normal`, `app`
-for an `--app` window, `popup`, and so on. `lastAccessed` is when the tab was
-last active, in whole milliseconds since the epoch, so a caller that finds
-several tabs on its URL can take the one the user used last, the choice
-`group activate` makes. An extension older than the two fields sends neither:
-`-` in tab-separated output, `""` and `0` in JSON. `group activate` prints the
+for an `--app` window or an installed web app, `popup`, and so on.
+`lastAccessed` is when the tab last became active in its window, in whole
+milliseconds since the epoch, so a caller that finds several tabs on its URL
+can take the most recent, the choice `group activate` makes. Focusing another
+window does not change it: of two windows that each show the URL, the one
+activated last wins, not the one focused last. An extension older than the
+two fields sends neither, and a Chrome older than 121 sends no
+`lastAccessed`: `-` in tab-separated output, `""` and `0` in JSON. `group activate` prints the
 tab it activated. `created` says whether it
 made the group, and `title` is the tab's title, which is the text a normal
 Chrome window shows before its own suffix: what chromectl can give a caller
@@ -248,7 +251,7 @@ the DevTools protocol and a test profile, not to a user's daily browser.
 | The host dies mid-call | The call exits 4. |
 | The extension is reloaded | The CLI uses the new host. |
 | One profile's host does not answer in time | `tab list` prints the other profiles' tabs, warns, and exits 4. |
-| The binary was upgraded, the extension not yet reloaded | Every call to that profile answers "reload the chromectl extension", exit 1. An extension that predates groups answers `group list` and `group activate` with "unknown command", and `tab list` shows its tabs in no group. One that predates `group add` answers it with "unknown command add-to-group". |
+| The binary was upgraded, the extension not yet reloaded | Every call to that profile answers "reload the chromectl extension", exit 1. An extension that predates groups answers `group list` and `group activate` with "unknown command", and `tab list` shows its tabs in no group. One that predates `group add` answers it with "unknown command add-to-group". One that predates `windowType` and `lastAccessed` shows `-` for both. |
 | A profile was copied into a second browser | The CLI refuses that profile's ids and names both browsers. |
 | A profile was copied inside one browser | Known limit: the CLI reads it as a reload and shows only one of the two. |
 | No runtime directory, as in a session without logind | Known limit: the host cannot start, and the CLI reports no host. |

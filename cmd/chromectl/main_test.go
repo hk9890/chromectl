@@ -128,8 +128,8 @@ func TestListShowsEveryProfile(t *testing.T) {
 	if err := tabList(&out, nil); err != nil {
 		t.Fatal(err)
 	}
-	want := "aaaa0001:4\taaaa0001:1\tnormal\taaaa0001:7\t*\t1761900000000\tchrome\tPRs\thttps://github.com/pulls\n" +
-		"bbbb0002:4\tbbbb0002:3\t-\t-\t-\t-\tbrave\tNews\thttps://orf.at\n"
+	want := "aaaa0001:4\taaaa0001:1\taaaa0001:7\t*\tchrome\tnormal\t1761900000000\tPRs\thttps://github.com/pulls\n" +
+		"bbbb0002:4\tbbbb0002:3\t-\t-\tbrave\t-\t-\tNews\thttps://orf.at\n"
 	if out.String() != want {
 		t.Fatalf("list =\n%s\nwant\n%s", out.String(), want)
 	}

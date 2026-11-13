@@ -29,17 +29,18 @@ type Reply struct {
 type Tab struct {
 	ID     int `json:"id"`
 	Window int `json:"window"`
-	// WindowType is Chrome's type of the tab's window: normal, popup, app,
-	// and so on. An extension older than the field sends none.
-	WindowType string `json:"windowType,omitempty"`
 	// Group is Chrome's group id, -1 for a tab in no group. An extension
 	// older than groups sends none, which decodes as 0, also no group.
 	Group  int  `json:"group"`
 	Active bool `json:"active"`
-	// LastAccessed is when the tab was last active, in milliseconds since
-	// the epoch, so tabs of different browsers compare. An extension older
-	// than the field sends none, which decodes as 0.
-	LastAccessed float64 `json:"lastAccessed,omitempty"`
+	// WindowType is Chrome's type of the tab's window: normal, popup, app.
+	// An extension older than the field sends none.
+	WindowType string `json:"windowType"`
+	// LastAccessed is when the tab last became active in its window, in
+	// milliseconds since the epoch, so tabs of different browsers compare.
+	// An extension older than the field, or a Chrome older than 121, sends
+	// none, which decodes as 0.
+	LastAccessed float64 `json:"lastAccessed"`
 	Title        string  `json:"title"`
 	URL          string  `json:"url"`
 }

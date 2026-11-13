@@ -25,8 +25,8 @@ import (
 const usage = `usage: chromectl <command> [args]
 
   tab list [--json]            every tab of every profile: id, window, group,
-                               active, browser, title, url (tab-separated, or a
-                               JSON array)
+                               active, browser, windowType, lastAccessed,
+                               title, url (tab-separated, or a JSON array)
   tab activate <tab-id>        activate the tab and focus its window
   tab open [--json] <url> [window]
                                open url in a new tab, in the given window or the
