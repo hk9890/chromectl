@@ -81,3 +81,5 @@ jobs:
       # the only layer that runs the host's socket lifecycle and exit codes.
       - name: drive
         run: mise run drive
+        env:
+          MISE_TASK_RUN_AUTO_INSTALL: "false"
