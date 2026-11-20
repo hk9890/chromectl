@@ -12,8 +12,8 @@ mise run drive
 `scripts/fakechrome.py` starts `./bin/chromectl` on pipes with the arguments Chrome passes, plays the
 extension, and runs `tab list`, `tab open`, `tab activate`, `group list`,
 `group activate` and `group add` through the CLI, each with the exit code it
-must give, and `tab close` against an extension that never answers, which must
-exit 4. It then checks that an old flat name such as `list` exits 2. It prints
+must give, and `tab close` on a tab the extension never answers for, which
+must exit 4 at its 200ms deadline. It then checks that an old flat name such as `list` exits 2. It prints
 every request the host forwarded and every CLI result, then closes the pipe and
 reports the host's exit and that `tab list` then finds no host. It exits 1 on the
 first result that differs from its `cases`. Edit `extension()` and `cases`

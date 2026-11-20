@@ -11,10 +11,12 @@ def write(m):
     b = json.dumps(m).encode(); p.stdin.write(struct.pack("=I", len(b)) + b); p.stdin.flush()
 def fail(why):
     print("FAIL:", why, flush=True); p.kill(); sys.exit(1)
-served = []
+received = []
+# Every request the CLI calls below send on, identify included.
+REQUESTS = 11
 # The host asks identify first and opens its socket only after the answer.
 def extension():
-    for _ in range(11):
+    for _ in range(REQUESTS):
         req = read()
         print("host->ext:", req, flush=True)
         if req["cmd"] == "identify":
@@ -27,13 +29,13 @@ def extension():
             write({"seq": req["seq"], "result": {"id": 4, "window": 1, "created": False, "title": "Pull requests"}})
         elif req["cmd"] == "add-to-group":
             write({"seq": req["seq"], "result": {"id": 4, "window": 1, "group": 7, "created": False}})
-        elif req["cmd"] == "close":
-            pass  # an extension that never answers: the CLI must give up at its deadline
+        elif req["cmd"] == "close" and req["id"] == 13:
+            pass  # a tab the extension never answers for: the CLI must give up at its deadline
         elif req["cmd"] == "open":
             write({"seq": req["seq"], "result": {"id": 5, "window": 1}})
         else:
             write({"seq": req["seq"], "error": "No tab with id: 99."})
-        served.append(req)
+        received.append(req)
 t = threading.Thread(target=extension, daemon=True); t.start()
 # A host renames its socket into place once it listens, so a visible name accepts.
 for _ in range(500):
@@ -65,10 +67,14 @@ def cli(args):
     try: return subprocess.run(["./bin/chromectl"] + args, env=env, capture_output=True, text=True, timeout=5)
     except subprocess.TimeoutExpired: fail("chromectl %s did not answer in 5s" % " ".join(args))
 for args, code, out, err in cases:
+    started = time.monotonic()
     r = cli(args)
+    took = time.monotonic() - started
     print("$ chromectl", *args, "->", r.returncode, repr(r.stdout), repr(r.stderr), flush=True)
     if (r.returncode, r.stdout, r.stderr) != (code, out, err):
         fail("want %d %r %r" % (code, out, err))
+    # The default deadline is 5s; a 200ms one that held must return well before.
+    if code == 4 and took > 2: fail("exit 4 after %.1fs, not at the 200ms deadline" % took)
 # The flat names of v0.2.0 are gone; main prints the usage after the error.
 r = cli(["list"])
 print("$ chromectl list ->", r.returncode, repr(r.stderr[:40]), flush=True)
@@ -78,7 +84,7 @@ r = cli(["tab list"])
 print("$ chromectl 'tab list' ->", r.returncode, flush=True)
 if r.returncode != 2: fail("want unknown command, exit 2")
 t.join(timeout=5)
-if len(served) != 11: fail("the extension read %d of eleven requests" % len(served))
+if len(received) != REQUESTS: fail("the extension read %d of %d requests" % (len(received), REQUESTS))
 p.stdin.close()
 try: p.wait(timeout=2)
 except subprocess.TimeoutExpired: fail("the host did not exit 2s after its stdin closed")
