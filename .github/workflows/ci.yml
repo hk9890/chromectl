@@ -61,3 +61,19 @@ jobs:
       # rather than in the pre-commit gate.
       - name: vuln
         run: mise run vuln
+
+  drive:
+    name: Drive
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up mise (pins go)
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+
+      # The built binary as Chrome starts it, against scripts/fakechrome.py:
+      # the only layer that runs the host's socket lifecycle and exit codes.
+      - name: drive
+        run: mise run drive

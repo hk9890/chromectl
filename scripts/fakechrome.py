@@ -14,7 +14,7 @@ def fail(why):
 served = []
 # The host asks identify first and opens its socket only after the answer.
 def extension():
-    for _ in range(10):
+    for _ in range(11):
         req = read()
         print("host->ext:", req, flush=True)
         if req["cmd"] == "identify":
@@ -27,6 +27,8 @@ def extension():
             write({"seq": req["seq"], "result": {"id": 4, "window": 1, "created": False, "title": "Pull requests"}})
         elif req["cmd"] == "add-to-group":
             write({"seq": req["seq"], "result": {"id": 4, "window": 1, "group": 7, "created": False}})
+        elif req["cmd"] == "close":
+            pass  # an extension that never answers: the CLI must give up at its deadline
         elif req["cmd"] == "open":
             write({"seq": req["seq"], "result": {"id": 5, "window": 1}})
         else:
@@ -55,6 +57,7 @@ cases = (
     (["tab", "list", "--json"], 0, listed + "\n", ""),
     (["tab", "open", "https://example.com", window], 0, profile + ":5\t" + window + "\n", ""),
     (["tab", "open", "--json", "https://example.com"], 0, '{"id":"%s:5","window":"%s"}\n' % (profile, window), ""),
+    (["tab", "close", "--timeout", "200ms", profile + ":13"], 4, "", "chromectl: no reply in 200ms; Chrome may still carry the command out\n"),
     (["tab", "activate", profile + ":99"], 1, "", "chromectl: No tab with id: 99.\n"),
     (["tab", "activate", "99"], 2, "", 'chromectl: tab id "99" is not of the form <profile>:<number> that tab list prints\n'),
 )
@@ -75,7 +78,7 @@ r = cli(["tab list"])
 print("$ chromectl 'tab list' ->", r.returncode, flush=True)
 if r.returncode != 2: fail("want unknown command, exit 2")
 t.join(timeout=5)
-if len(served) != 10: fail("the extension answered %d of ten requests" % len(served))
+if len(served) != 11: fail("the extension read %d of eleven requests" % len(served))
 p.stdin.close()
 try: p.wait(timeout=2)
 except subprocess.TimeoutExpired: fail("the host did not exit 2s after its stdin closed")
