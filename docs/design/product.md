@@ -42,7 +42,8 @@ Chrome owns tab identity, and chromectl does not pretend otherwise.
 ## Groups
 
 `group activate <title> <url> [window]` is the run-or-raise of a group, in one
-call:
+call
+([decision 0011](../decisions/0011-group-activate-takes-a-url-and-creates-the-group-it-does-not-find.md)):
 
 1. Find the open groups whose title equals `<title>`, in every profile.
 2. If there are several, take the one that holds the most recently accessed
@@ -94,8 +95,8 @@ join a group of another profile:
 | Another group has the title | The tab moves into it, the group with the most recently accessed tab where several share the title | The same choice as `group activate` |
 | The group is in an incognito window and the tab is not, or the reverse | That group is passed over | Chrome cannot move a tab between the two |
 | The group is in another window | Chrome moves the tab to that window; the output names the window it is in now | That is how Chrome groups a tab |
-| Another profile has a group with the title, the tab's profile none | A new group with the title in the tab's profile; `group activate` then raises whichever of the two was used last | A tab cannot join a group of another profile, and a failure would need the exit code the next row avoids |
-| No group has the title | A new group with the title around the tab, in the tab's window | The same as `group activate`, and a failure would need a "not found" exit code nothing else needs |
+| Another profile has a group with the title, the tab's profile none | A new group with the title in the tab's profile; `group activate` then raises whichever of the two was used last | A tab cannot join a group of another profile, and no command fails on a missing group, as the next row says |
+| No group has the title | A new group with the title around the tab, in the tab's window | The same as `group activate` ([decision 0011](../decisions/0011-group-activate-takes-a-url-and-creates-the-group-it-does-not-find.md)) |
 | Chrome cannot group the tab, as in an `--app` window | Chrome's error, exit 1 | Chrome owns which tabs a group can hold |
 
 The command neither activates the tab nor focuses a window; a caller that
@@ -132,7 +133,9 @@ window does not change it: of two windows that each show the URL, the one
 activated last wins, not the one focused last. `windowFocusedAt` says that:
 when the tab's window last got the focus, in whole milliseconds since the
 epoch. The extension learns it from Chrome's focus events and keeps it in
-memory, so it is unknown for a window that has not had the focus since the
+memory
+([decision 0009](../decisions/0009-window-focus-times-live-in-the-workers-memory-only.md)),
+so it is unknown for a window that has not had the focus since the
 extension started, as after a reload of the extension or a restart of
 Chrome. The one exception is the window that has the focus as the extension
 starts: it gets the start time, the latest time it can have got the focus. A focus that leaves Chrome for another application changes nothing.

@@ -7,7 +7,8 @@ outward: it calls `connectNative`, Chrome starts the program that the native
 messaging manifest names, and the two share a pipe. Nothing lets a process
 open that pipe from the other end. So chromectl's command line never connects
 to Chrome. It connects to the host that Chrome already started, and the host
-relays.
+relays
+([decided](../decisions/0001-the-cli-reaches-chrome-only-through-a-native-messaging-host.md)).
 
 Every structural choice below follows from this one fact.
 
@@ -47,8 +48,8 @@ Only the CLI adds and strips the profile.
 
 **The socket name is the host's identity.** Each host has its own socket in
 the user's runtime directory, and its name carries the profile, the browser,
-the browser's pid and the host's start time. One read of the directory finds
-every host, with no registry to keep in step.
+the browser's pid and the host's start time
+([decided](../decisions/0004-a-host-asks-for-its-profile-before-it-listens.md)).
 
 - A socket name appears only once a host listens behind it, so a refused
   connection means a dead host. The CLI removes such a socket before it reads
@@ -86,7 +87,9 @@ request-reply socket rather than a stream, because a CLI call is one question.
 The host assigns `seq`; the CLI never sees it. Where a request may have
 reached Chrome and the host has no answer to give, because Chrome went away or
 the write to it failed, the host logs the reason and closes the connection
-without a reply. The CLI reads a connection closed without a reply as it reads
+without a reply
+([decided](../decisions/0007-the-host-closes-the-connection-when-it-has-no-answer.md)).
+The CLI reads a connection closed without a reply as it reads
 a deadline that passed: the outcome is unknown. Where the request provably
 never reached Chrome, too large for its limit or sent after Chrome went away,
 the host replies with the reason instead. Every reply is passed on with its
