@@ -40,11 +40,10 @@ extension makes a random id once and keeps it in IndexedDB: each profile has
 its own, and clearing browsing data does not touch it. The host asks for it
 with `identify` before it listens.
 
-**Ids.** A tab, window or group id is `<profile>:<chrome id>`. Chrome's numbers are
-unique in one browser process only; the profile part makes them unique across
-browsers. An id is always printed and read in full: a shortened form would
-change its meaning when a profile starts or stops. Only the CLI adds and
-strips the profile.
+**Ids.** A tab, window or group id is `<profile>:<chrome id>`, printed and
+read in full
+([decided](../decisions/0003-an-id-is-the-profile-plus-the-chrome-id-in-full.md)).
+Only the CLI adds and strips the profile.
 
 **The socket name is the host's identity.** Each host has its own socket in
 the user's runtime directory, and its name carries the profile, the browser,
@@ -99,7 +98,7 @@ The deadline is the CLI's alone. Each call takes one instant, dials with it,
 and sets it on the connection, so the connect, the request and the reply all
 fall under it. When it passes, the CLI closes the connection; what it exits
 with is [product.md](product.md#exit-codes)'s. The host does not time out
-([rejected](decisions.md#rejected-alternatives)). A call the extension never
+([decided](../decisions/0006-the-cli-holds-the-only-deadline.md)). A call the extension never
 answers holds one goroutine and one pending entry in the host until Chrome
 closes the pipe, and its late reply, written to a closed connection, is
 dropped.
@@ -138,10 +137,6 @@ the profile the window or the tab names, or the one that runs.
   call that reached Chrome has written its reply, or has had one second to. The process exits with
   `Run`, so a reply not yet written would be lost, and a caller that never
   reads must not hold the process.
-
-## Rejected alternatives
-
-[decisions.md](decisions.md) holds them, and the designs this one replaced.
 
 ## Layout
 

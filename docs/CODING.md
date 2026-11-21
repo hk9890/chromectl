@@ -29,8 +29,8 @@ framing and Chrome drops the host. Log to stderr, via `log`, and nothing else.
    `parseID`, and route the call to the host it names with `hostFor`.
 4. Add a case to `internal/hostd/hostd_test.go` with the fake extension.
 
-The extension keeps the `tabs`, `tabGroups` and `nativeMessaging` permissions
-and no other. A command that needs more is a different product.
+A command works with the permissions the extension has
+([decision 0008](decisions/0008-the-extensions-permission-set-is-closed.md)).
 
 Return a usage mistake as `badUsage(...)`; `exitCode` in
 `cmd/chromectl/tabs.go` maps it to 2. Exit codes are

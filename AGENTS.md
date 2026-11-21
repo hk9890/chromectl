@@ -39,8 +39,15 @@ neither is visible from the code.
 
 **MUST read [docs/design/README.md](docs/design/README.md) before adding a
 command, a field on the wire, a permission to the extension, or a process.**
-The design set carries the rejected alternatives, so a rejected idea is not
-re-proposed as new.
+The design set states what each command, field and process is for, and what
+the product leaves out.
+
+### Changing a decided design
+
+**MUST read the records in [docs/decisions/](docs/decisions/) that bear on the
+change before editing `cmd/`, `internal/`, `extension/`, `embed.go` or
+`.goreleaser.yaml`.** Each holds a decision in force, and a change against one is the user's call — name
+the record and ask.
 
 ### Testing and verification
 

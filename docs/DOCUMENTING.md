@@ -10,9 +10,9 @@ this repository's delta, which wins where the two disagree.
 | `docs/*.md` | How to operate on this repository now | Command register: imperative, one instruction per line |
 | `docs/design/` | What the system is intended to be, and why | Prose. A design doc argues; rationale is its content, not padding. |
 
-`docs/design/README.md` states which design document owns what. Record a
-rejected alternative, and a decision a change replaces, in
-`design/decisions.md`.
+`docs/design/README.md` states which design document owns what. Where a record
+in `docs/decisions/` holds the reason for a choice, link the record from the
+design doc.
 
 ## Deliberately absent
 
