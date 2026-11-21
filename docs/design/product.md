@@ -95,8 +95,8 @@ join a group of another profile:
 | Another group has the title | The tab moves into it, the group with the most recently accessed tab where several share the title | The same choice as `group activate` |
 | The group is in an incognito window and the tab is not, or the reverse | That group is passed over | Chrome cannot move a tab between the two |
 | The group is in another window | Chrome moves the tab to that window; the output names the window it is in now | That is how Chrome groups a tab |
-| Another profile has a group with the title, the tab's profile none | A new group with the title in the tab's profile; `group activate` then raises whichever of the two was used last | A tab cannot join a group of another profile, and no command fails on a missing group, as the next row says |
-| No group has the title | A new group with the title around the tab, in the tab's window | The same as `group activate` ([decision 0011](../decisions/0011-group-activate-takes-a-url-and-creates-the-group-it-does-not-find.md)) |
+| Another profile has a group with the title, the tab's profile none | A new group with the title in the tab's profile; `group activate` then raises whichever of the two was used last | A tab cannot join a group of another profile, and a missing group is not a failure ([decision 0011](../decisions/0011-group-activate-takes-a-url-and-creates-the-group-it-does-not-find.md)) |
+| No group has the title | A new group with the title around the tab, in the tab's window | The same as `group activate` |
 | Chrome cannot group the tab, as in an `--app` window | Chrome's error, exit 1 | Chrome owns which tabs a group can hold |
 
 The command neither activates the tab nor focuses a window; a caller that
@@ -180,7 +180,7 @@ tab may still open or close, so the message says the outcome is unknown.
 | Code | Meaning | What the caller can do |
 |---|---|---|
 | 0 | Done | |
-| 1 | A reply with an error: Chrome's text verbatim, the extension's own, or a host's that cannot serve or never sent the request on. Also any failure of chromectl's own that is not usage, such as `install` | Show the text |
+| 1 | A reply with an error: Chrome's text verbatim, the extension's own, or a host's that cannot serve, never sent the request on, or could not decode the extension's reply. Also any failure of chromectl's own that is not usage, such as `install` | Show the text |
 | 2 | Bad usage: an unknown command or flag, a missing or extra argument, an id not of the form `tab list` prints, an empty title or url, a duration of zero or less, or no window id where several profiles run | Fix the call |
 | 4 | No reply: the deadline passed, or the host closed the connection without one, as when Chrome goes away mid-call. The command may or may not have taken effect. | Retry a read; check before repeating a write |
 | 5 | No host is listening, none for the profile the id names, or no runtime directory a host could listen in. Nothing reached Chrome. | Fall back, or start Chrome |
@@ -232,6 +232,7 @@ the Web Store, adding a permission becomes a prompt the user must accept.
 | Left out | Why |
 |---|---|
 | Reading page content, running scripts, screenshots | [Decision 0008](../decisions/0008-the-extensions-permission-set-is-closed.md) |
+| Driving pages, filling forms, waiting for loads | chromectl is not a browser automation tool ([decision 0008](../decisions/0008-the-extensions-permission-set-is-closed.md)) |
 | Bookmarks, history, cookies, downloads | Not tabs. Each is a product of its own. |
 | Firefox | [Decision 0010](../decisions/0010-chromectl-supports-chrome-chromium-and-brave-on-linux-and-not-firefox.md) |
 | A URL matcher | [Decision 0005](../decisions/0005-the-caller-decides-which-page-or-window-matches.md) |

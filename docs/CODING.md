@@ -29,7 +29,8 @@ framing and Chrome drops the host. Log to stderr, via `log`, and nothing else.
    `parseID`, and route the call to the host it names with `hostFor`.
 4. Add a case to `internal/hostd/hostd_test.go` with the fake extension.
 
-A command works with the permissions the extension has
+Use only the permissions `extension/manifest.json` asks for. A command that
+needs another is the user's call
 ([decision 0008](decisions/0008-the-extensions-permission-set-is-closed.md)).
 
 Return a usage mistake as `badUsage(...)`; `exitCode` in
