@@ -31,11 +31,8 @@ Chrome owns tab identity, and chromectl does not pretend otherwise.
   once. `tab list` shows them all; an id names its own profile, so no command
   needs a profile flag.
 - Finding a tab by its URL is the caller's job: list, match on the URL, act on
-  the id. What counts as the same page (a trailing slash, a query, a fragment,
-  a redirect) is a policy, and chromectl holds none. The one place chromectl
-  reads a URL to choose is inside a group its title has already found, where
-  `group activate` ranks the group's tabs by the URL it was given. There the
-  URL never decides that a page is open.
+  the id
+  ([decision 0005](../decisions/0005-the-caller-decides-which-page-or-window-matches.md)).
 - A window is addressed only as a place to open into. Raising a tab focuses
   its window as a side effect, because a tab that is active in an unfocused
   window is not raised. On GNOME Wayland that focus does not raise the window:
@@ -45,7 +42,8 @@ Chrome owns tab identity, and chromectl does not pretend otherwise.
 ## Groups
 
 `group activate <title> <url> [window]` is the run-or-raise of a group, in one
-call:
+call
+([decision 0011](../decisions/0011-group-activate-takes-a-url-and-creates-the-group-it-does-not-find.md)):
 
 1. Find the open groups whose title equals `<title>`, in every profile.
 2. If there are several, take the one that holds the most recently accessed
@@ -97,8 +95,8 @@ join a group of another profile:
 | Another group has the title | The tab moves into it, the group with the most recently accessed tab where several share the title | The same choice as `group activate` |
 | The group is in an incognito window and the tab is not, or the reverse | That group is passed over | Chrome cannot move a tab between the two |
 | The group is in another window | Chrome moves the tab to that window; the output names the window it is in now | That is how Chrome groups a tab |
-| Another profile has a group with the title, the tab's profile none | A new group with the title in the tab's profile; `group activate` then raises whichever of the two was used last | A tab cannot join a group of another profile, and a failure would need the exit code the next row avoids |
-| No group has the title | A new group with the title around the tab, in the tab's window | The same as `group activate`, and a failure would need a "not found" exit code nothing else needs |
+| Another profile has a group with the title, the tab's profile none | A new group with the title in the tab's profile; `group activate` then raises whichever of the two was used last | A tab cannot join a group of another profile, and a missing group is not a failure ([decision 0011](../decisions/0011-group-activate-takes-a-url-and-creates-the-group-it-does-not-find.md)) |
+| No group has the title | A new group with the title around the tab, in the tab's window | The same as `group activate` |
 | Chrome cannot group the tab, as in an `--app` window | Chrome's error, exit 1 | Chrome owns which tabs a group can hold |
 
 The command neither activates the tab nor focuses a window; a caller that
@@ -135,7 +133,9 @@ window does not change it: of two windows that each show the URL, the one
 activated last wins, not the one focused last. `windowFocusedAt` says that:
 when the tab's window last got the focus, in whole milliseconds since the
 epoch. The extension learns it from Chrome's focus events and keeps it in
-memory, so it is unknown for a window that has not had the focus since the
+memory
+([decision 0009](../decisions/0009-window-focus-times-live-in-the-workers-memory-only.md)),
+so it is unknown for a window that has not had the focus since the
 extension started, as after a reload of the extension or a restart of
 Chrome. The one exception is the window that has the focus as the extension
 starts: it gets the start time, the latest time it can have got the focus. A focus that leaves Chrome for another application changes nothing.
@@ -180,7 +180,7 @@ tab may still open or close, so the message says the outcome is unknown.
 | Code | Meaning | What the caller can do |
 |---|---|---|
 | 0 | Done | |
-| 1 | A reply with an error: Chrome's text verbatim, the extension's own, or a host's that cannot serve or never sent the request on. Also any failure of chromectl's own that is not usage, such as `install` | Show the text |
+| 1 | A reply with an error: Chrome's text verbatim, the extension's own, or a host's that cannot serve, never sent the request on, or could not decode the extension's reply. Also any failure of chromectl's own that is not usage, such as `install` | Show the text |
 | 2 | Bad usage: an unknown command or flag, a missing or extra argument, an id not of the form `tab list` prints, an empty title or url, a duration of zero or less, or no window id where several profiles run | Fix the call |
 | 4 | No reply: the deadline passed, or the host closed the connection without one, as when Chrome goes away mid-call. The command may or may not have taken effect. | Retry a read; check before repeating a write |
 | 5 | No host is listening, none for the profile the id names, or no runtime directory a host could listen in. Nothing reached Chrome. | Fall back, or start Chrome |
@@ -201,10 +201,9 @@ connects and stops it when Chrome exits.
 The binary carries the extension inside it, and `chromectl install` writes both
 to `~/.local/share/chromectl/`: a copy of the running binary, and the
 extension beside it. The manifest names that copy, and the user loads the
-extension from there. One fixed directory makes an upgrade `mise upgrade`,
-`chromectl install`, and a reload of the extension's card; nothing is loaded
-again from a new path. Why the manifest does not name the running binary is in
-[decisions.md](decisions.md).
+extension from there. Why one fixed directory, and why the manifest does not
+name the running binary, is in
+[decision 0002](../decisions/0002-install-copies-the-binary-and-the-extension-to-one-fixed-directory.md).
 
 The extension id is fixed by a public key in its manifest. Without that, an
 unpacked extension's id would depend on the directory it was loaded from, and
@@ -225,26 +224,21 @@ the Web Store, adding a permission becomes a prompt the user must accept.
 
 | In | Why |
 |---|---|
-| Chrome, Chromium, Brave, on Linux | One native messaging manifest format, one config root, one socket convention |
+| Chrome, Chromium, Brave, on Linux | [Decision 0010](../decisions/0010-chromectl-supports-chrome-chromium-and-brave-on-linux-and-not-firefox.md) |
 | The `tabs` and `tabGroups` APIs | Everything the job needs, and the narrowest permissions that provide it. `tabGroups` warns "View and manage your tab groups": it reads and changes the strip, not a page. A group's id needs no permission, but its title and its collapsed state do. |
 
 **Out, deliberately**
 
 | Left out | Why |
 |---|---|
-| Reading page content, running scripts, screenshots | A different permission set (`<all_urls>`, `scripting`) and a different trust level. The extension asks for what the job needs and nothing that would let the host read a page. |
+| Reading page content, running scripts, screenshots | [Decision 0008](../decisions/0008-the-extensions-permission-set-is-closed.md) |
+| Driving pages, filling forms, waiting for loads | chromectl is not a browser automation tool ([decision 0008](../decisions/0008-the-extensions-permission-set-is-closed.md)) |
 | Bookmarks, history, cookies, downloads | Not tabs. Each is a product of its own. |
-| Firefox | Decided out. Its native messaging and extension format are close enough that it would be tempting, and the second browser would double every manual test with no consumer asking for it. |
-| A URL matcher | Matching a page is a policy. See Model. |
+| Firefox | [Decision 0010](../decisions/0010-chromectl-supports-chrome-chromium-and-brave-on-linux-and-not-firefox.md) |
+| A URL matcher | [Decision 0005](../decisions/0005-the-caller-decides-which-page-or-window-matches.md) |
 | Any window management beyond focus | The window manager owns windows. wctl exists for that. |
 | Mapping a Chrome window to the window manager's window | No Chrome API exposes the OS window, and every Chrome window shares one process. The caller joins on the title [Surface](#surface) gives it. That join cannot find a window the user named, which shows the name alone, and cannot tell apart two windows whose active tabs share a title. |
 | Group colour, ungrouping | Not needed yet. Each is one Chrome call away. |
-
-## Non-goals
-
-chromectl is not a browser automation tool. It does not drive pages, fill
-forms, or wait for loads. Anything that needs to see inside a page belongs to
-the DevTools protocol and a test profile, not to a user's daily browser.
 
 ## What degrades, and how far
 

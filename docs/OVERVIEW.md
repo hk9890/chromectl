@@ -3,6 +3,8 @@
 ## Start here
 
 The design set under [design/](design/) owns why the system has this shape.
+The records under [decisions/](decisions/) hold each decision in force, with
+the options it rejected.
 [design/architecture.md](design/architecture.md) states the constraint every
 structural choice follows from: only the extension can open a connection, so
 the CLI talks to the host Chrome already started, never to Chrome.
