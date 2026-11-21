@@ -61,3 +61,25 @@ jobs:
       # rather than in the pre-commit gate.
       - name: vuln
         run: mise run vuln
+
+  drive:
+    name: Drive
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The drive needs go alone; the Lint job's cache holds every tool.
+      - name: Set up mise (go only)
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          install_args: go
+          cache_key_prefix: mise-drive
+
+      # The built binary as Chrome starts it, against scripts/fakechrome.py:
+      # the only layer that runs the host's socket lifecycle and exit codes.
+      - name: drive
+        run: mise run drive
+        env:
+          MISE_TASK_RUN_AUTO_INSTALL: "false"

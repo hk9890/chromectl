@@ -32,7 +32,7 @@ cannot overwrite the manifest of the user's real Chrome.
 are the `depends` of `[tasks.quality]` in `.mise.toml`.
 
 CI runs the same checks on every push in `.github/workflows/ci.yml`, plus
-`mise run vuln`, which needs the network.
+`mise run vuln`, which needs the network, and `mise run drive`.
 
 ## Before reporting a change as green
 
