@@ -105,7 +105,8 @@ with is [product.md](product.md#exit-codes)'s. The host does not time out
 answers holds its goroutines and one pending entry in the host until its
 caller closes the connection or Chrome closes the pipe. Chrome may still carry
 the request out; its late reply, for a `seq` no longer pending, is logged and
-dropped.
+dropped. The caller's close frees a call only once its request is written: a
+call that waits to write to a Chrome that stopped reading the pipe stays held.
 
 The CLI tells the two ways a call ends without a reply by one error type,
 `client.NoReplyError`, which unwraps to `os.ErrDeadlineExceeded` or `io.EOF`.

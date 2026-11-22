@@ -271,8 +271,9 @@ func (h *host) serve(conn net.Conn) {
 		_ = json.NewEncoder(conn).Encode(proto.Reply{Error: h.stale})
 		return
 	}
-	// A caller sends one request, so its next read ends only when it leaves,
-	// or when the deferred Close above ends this call.
+	// A caller sends one request, so the next read ends only when it closes
+	// the connection or its write side, which both count as leaving, or when
+	// the deferred Close above ends this call.
 	callerLeft := make(chan struct{})
 	go func() {
 		_, _ = io.Copy(io.Discard, conn)
