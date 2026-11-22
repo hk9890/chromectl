@@ -1,15 +1,18 @@
 package hostd_test
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -446,6 +449,55 @@ func TestAPendingCallGetsNoReplyWhenChromeGoesAway(t *testing.T) {
 	if !errors.As(err, &noReply) || !errors.Is(err, io.EOF) {
 		t.Fatalf("err = %v, want a NoReplyError for a closed connection", err)
 	}
+}
+
+// A caller that gives up on a call Chrome never answers frees it at once: the
+// host holds no connection for it until Chrome answers.
+func TestACallerThatLeavesFreesItsCall(t *testing.T) {
+	var logged lockedBuffer
+	log.SetOutput(&logged)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	asked := make(chan struct{})
+	socket, done := rawExtensionIn(t, socketDir(t), 1, identifying(profile, func(json.RawMessage, proto.Request, io.Writer) error {
+		close(asked)
+		return nil
+	}))
+	defer done()
+
+	conn, err := net.Dial("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.NewEncoder(conn).Encode(proto.Request{Cmd: "close"}); err != nil {
+		t.Fatal(err)
+	}
+	<-asked
+	_ = conn.Close()
+
+	for start := time.Now(); !strings.Contains(logged.String(), "the caller left"); time.Sleep(time.Millisecond) {
+		if time.Since(start) > 2*time.Second {
+			t.Fatalf("the host still waits for Chrome after its caller left; log: %q", logged.String())
+		}
+	}
+}
+
+// lockedBuffer is a log output that a test can read while the host writes.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 // A request over Chrome's limit never reaches Chrome, so the caller is told

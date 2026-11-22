@@ -58,7 +58,7 @@ func Run(fromChrome io.Reader, toChrome io.Writer, dir string, self Self) error 
 	}()
 
 	var id proto.Identity
-	a, _ := h.ask(nil, proto.Request{Cmd: "identify"})
+	a, _ := h.ask(nil, nil, proto.Request{Cmd: "identify"})
 	if a.gone != nil {
 		return chromeEnded(<-readErr)
 	}
@@ -190,10 +190,12 @@ type host struct {
 	inFlightDone sync.WaitGroup
 }
 
-// answer is what a call gets: Chrome's reply, or why there is none.
+// answer is what a call gets: Chrome's reply, or why there is none. With
+// callerLeft, no one is there to hear either.
 type answer struct {
-	reply proto.Reply
-	gone  error
+	reply      proto.Reply
+	gone       error
+	callerLeft bool
 }
 
 func (h *host) readReplies(r io.Reader) error {
@@ -269,12 +271,22 @@ func (h *host) serve(conn net.Conn) {
 		_ = json.NewEncoder(conn).Encode(proto.Reply{Error: h.stale})
 		return
 	}
-	a, inFlight := h.ask(conn, req)
-	if a.gone != nil {
+	// A caller sends one request, so its next read ends only when it leaves,
+	// or when the deferred Close above ends this call.
+	callerLeft := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, conn)
+		close(callerLeft)
+	}()
+	a, inFlight := h.ask(conn, callerLeft, req)
+	switch {
+	case a.callerLeft:
+		log.Printf("%s: seq %d: the caller left before the reply", req.Cmd, a.reply.Seq)
+	case a.gone != nil:
 		// No reply at all: only Chrome's replies reach the caller, and a
 		// connection closed without one tells it the outcome is unknown.
 		log.Printf("%s: chrome went away: %v", req.Cmd, a.gone)
-	} else {
+	default:
 		_ = json.NewEncoder(conn).Encode(a.reply)
 	}
 	if inFlight {
@@ -287,8 +299,10 @@ func (h *host) serve(conn net.Conn) {
 
 // ask relays req to Chrome and waits for its reply. It reports whether the
 // caller's conn went in flight, which Run waits for; a call made after
-// Chrome is gone does not, nor the host's own call, which has no conn.
-func (h *host) ask(conn net.Conn, req proto.Request) (a answer, inFlight bool) {
+// Chrome is gone does not, nor the host's own call, which has no conn. The
+// wait also ends when callerLeft closes; Chrome may still carry the request
+// out, and its late reply is logged as one for an unknown seq.
+func (h *host) ask(conn net.Conn, callerLeft <-chan struct{}, req proto.Request) (a answer, inFlight bool) {
 	ch := make(chan answer, 1)
 	h.mu.Lock()
 	h.seq++
@@ -321,5 +335,13 @@ func (h *host) ask(conn net.Conn, req proto.Request) (a answer, inFlight bool) {
 		h.mu.Unlock()
 		return answer{gone: err}, inFlight
 	}
-	return <-ch, inFlight
+	select {
+	case a = <-ch:
+		return a, inFlight
+	case <-callerLeft:
+		h.mu.Lock()
+		delete(h.pending, req.Seq)
+		h.mu.Unlock()
+		return answer{reply: proto.Reply{Seq: req.Seq}, callerLeft: true}, inFlight
+	}
 }
