@@ -102,8 +102,9 @@ and sets it on the connection, so the connect, the request and the reply all
 fall under it. When it passes, the CLI closes the connection; what it exits
 with is [product.md](product.md#exit-codes)'s. The host does not time out
 ([decided](../decisions/0006-the-cli-holds-the-only-deadline.md)). A call the extension never
-answers holds one goroutine and one pending entry in the host until Chrome
-closes the pipe, and its late reply, written to a closed connection, is
+answers holds its goroutines and one pending entry in the host until its
+caller closes the connection or Chrome closes the pipe. Chrome may still carry
+the request out; its late reply, for a `seq` no longer pending, is logged and
 dropped.
 
 The CLI tells the two ways a call ends without a reply by one error type,
@@ -134,7 +135,9 @@ the profile the window or the tab names, or the one that runs.
   the `seq` does not decode either, it fails every pending call, because no
   one call can be told it was the one.
 - Every socket connection is its own goroutine: decode, register, write to
-  Chrome under one mutex, wait on its channel, encode.
+  Chrome under one mutex, wait on its channel or for the caller to leave,
+  encode. A second goroutine reads the connection during the wait, to see the
+  caller leave.
 - When the pipe closes, every pending call is closed without a reply, the
   socket file is removed, the listener closes, and `Run` returns once each
   call that reached Chrome has written its reply, or has had one second to. The process exits with
