@@ -32,8 +32,9 @@ func TestLineWithoutTheStampTakesWhatGoRecorded(t *testing.T) {
 }
 
 func TestLineKeepsTheStamp(t *testing.T) {
+	version, commit, date := Version, Commit, Date
+	t.Cleanup(func() { Version, Commit, Date = version, commit, date })
 	Version, Commit, Date = "0.4.0", "986fc60", "2026-11-27T16:14:25Z"
-	t.Cleanup(func() { Version, Commit, Date = "dev", "unknown", "unknown" })
 
 	info := &debug.BuildInfo{Main: debug.Module{Version: "v9.9.9"}, Settings: []debug.BuildSetting{{Key: "vcs.revision", Value: "ffffffffff"}}}
 	if got := line(info); got != "0.4.0 (986fc60, 2026-11-27T16:14:25Z)" {

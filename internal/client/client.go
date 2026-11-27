@@ -40,7 +40,8 @@ func (e *NoReplyError) Error() string { return e.msg }
 func (e *NoReplyError) Unwrap() error { return e.err }
 
 // StaleError is a reply from an extension older than chromectl: it does not
-// know the command it was sent, or it could not tell its host its profile.
+// know the command it was sent, or its host found that it does not know
+// identify.
 // Nothing reached Chrome; a reload of the extension fixes it.
 type StaleError struct{}
 
