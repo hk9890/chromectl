@@ -96,7 +96,7 @@ func exitCode(err error) int {
 		return 2
 	case errors.As(err, &noReply):
 		return 4
-	case errors.Is(err, client.ErrNoHost):
+	case errors.Is(err, client.ErrNoHost), errors.As(err, new(client.StaleError)):
 		return 5
 	}
 	return 1
