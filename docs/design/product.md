@@ -154,6 +154,10 @@ shell pipe needs no `jq`. Errors stay plain text on stderr in both modes. This
 follows wctl, whose listing commands take `--json` and whose action commands do
 not.
 
+`tab open`, and `group activate` where it creates a group, work without a window id
+only while one profile runs; with several, the caller names the window, and so
+the profile.
+
 ### Deadline
 
 Every call to a host gives up after 5 seconds, or after the duration
@@ -208,11 +212,12 @@ written after the user loaded the extension and read the id back. With it,
 `chromectl install` can write the manifest first and the extension works the
 moment it is loaded.
 
-After an upgrade, the user reloads the extension. Until the reload, the old
-extension runs beside the new binary; what that costs is in
-[What degrades](#what-degrades-and-how-far). The reload of an unpacked
-extension grants a new permission without a prompt; Chrome disables an
-extension from the Web Store until the user accepts one. Whether a command may
+After an upgrade and a new `chromectl install`, the user reloads the
+extension. Until the reload, the old extension runs beside the new binary;
+what that costs is in [What degrades](#what-degrades-and-how-far). The reload
+of an unpacked extension grants a new permission without a prompt; Chrome
+disables a Web Store extension whose update adds a permission with a warning,
+until the user accepts it. Whether a command may
 add a permission is
 [decision 0008](../decisions/0008-the-extensions-permission-set-is-closed.md)'s.
 

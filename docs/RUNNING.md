@@ -1,10 +1,11 @@
 # Running
 
-Call the Skill tool with `run` for the generic flow. Below is the local delta,
-which wins where the two disagree.
-
 Two substrates. The first is headless and safe; the second is the user's live
 browser.
+
+To drive chromectl beyond `mise run drive`, call the Skill tool with `run` for
+the generic flow. This file is the local delta, and wins where the two
+disagree.
 
 ## Headless: the fake Chrome
 
@@ -12,13 +13,14 @@ browser.
 mise run drive
 ```
 
-`scripts/fakechrome.py` starts `./bin/chromectl` on pipes as Chrome does, in a
-fresh `XDG_RUNTIME_DIR`, plays the extension, and runs its `cases` through the
-CLI. It prints every request the host forwarded and every CLI result, and
-exits 1 on the first result that differs.
+`scripts/fakechrome.py` starts `./bin/chromectl` on pipes as Chrome does,
+plays the extension, and runs its `cases` through the CLI. It prints every
+request the host forwarded and every CLI result, and exits 1 on the first
+result that differs. The task gives it a fresh `XDG_RUNTIME_DIR`, so the CLI
+does not also reach the hosts of a running Chrome.
 
-To drive a different case, edit `extension()` and `cases` in the script
-together.
+To drive a different case, edit `extension()`, `cases` and `REQUESTS` in the
+script together.
 
 ## Live: the user's Chrome
 

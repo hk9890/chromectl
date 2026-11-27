@@ -108,7 +108,6 @@ the request out; its late reply, for a `seq` no longer pending, is logged and
 dropped. The caller's close frees a call only once its request is written: a
 call that waits to write to a Chrome that stopped reading the pipe stays held.
 
-The CLI reads the two ways a call ends without a reply as one outcome.
 A fan-out leaves out only a dead host, whose socket refuses. A host that
 closed the connection is a failure the fan-out reports: the CLI cannot tell a
 Chrome that shuts down from a host that crashed mid-call.
@@ -135,8 +134,8 @@ the profile the window or the tab names, or the one that runs.
   call, because no one call can be told it was the one.
 - Calls do not wait for each other: every socket connection is served on its
   own, and only the write to Chrome is serialized. The host watches each
-  connection while its call waits, so a caller that leaves frees its call at
-  once.
+  connection while its call waits, so a caller that leaves frees its call,
+  with the one exception [The deadline](#the-deadline) states.
 - When the pipe closes, every pending call is closed without a reply. The host
   then waits for each call that reached Chrome to write its reply, within the
   bound that [Three processes](#three-processes) gives: the process exits

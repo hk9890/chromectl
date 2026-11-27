@@ -11,7 +11,9 @@ mise run fmt
 one wire. A field renamed on one side is a silent failure on the other: the
 extension answers `{seq, error: "unknown command"}` or acts on `undefined`.
 Change them in the same commit, and add the case to
-`internal/hostd/hostd_test.go`.
+`internal/hostd/hostd_test.go`. `proto.HostName` and `HOST` in
+`background.js` are one name too: no test loads the JavaScript, so a
+difference shows only as a Chrome that finds no host.
 
 ## The host owns stdout
 
@@ -41,9 +43,9 @@ Return a usage mistake as `badUsage(...)`; `exitCode` in
 - The extension id `mpnpeobidlmllklmdpnkhhhblkbhpmcp` is derived from the
   `key` in `extension/manifest.json`. The `key` never changes; every installed
   native messaging manifest allows that id and nothing else.
-- The CLI prints and reads a tab or window id as `<profile>:<number>`,
-  and it alone adds and strips the profile; the host and the extension see
-  only the number
+- The CLI prints a tab, window or group id as `<profile>:<number>` and reads a
+  tab or window id in that form. It alone adds and strips the profile; the
+  host and the extension see only the number
   ([decision 0003](decisions/0003-an-id-is-the-profile-plus-the-chrome-id-in-full.md)).
 - A host's identity is its socket name, which `client.Hosts` parses. Change
   the name in `internal/hostd` and `internal/client` together.

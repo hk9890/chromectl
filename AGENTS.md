@@ -60,8 +60,8 @@ whether it can run without a Chrome.
 ### Reviewing changes
 
 **MUST read [docs/REVIEWING.md](docs/REVIEWING.md) before your first
-`gh pr view`, `gh pr diff` or `git diff` of a change under review, and before
-calling a review skill.** It carries the rules a finished change is held to:
+`gh pr view`, `gh pr diff`, `git diff` or `git show` of a change under review,
+before calling a review skill, and before judging a diff you were handed.** It carries the rules a finished change is held to:
 what happens to Chrome's error text on the way to the caller, and what the one
 sentinel error must say.
 

@@ -37,8 +37,9 @@ CI runs the same checks on every push in `.github/workflows/ci.yml`, plus
 ## Before reporting a change as green
 
 - `mise run quality` passes.
-- `mise run drive` passes when the change touched a Go file; it is the only
-  layer that runs the real binary.
+- `mise run drive` passes when the change touched a Go file, `go.mod`,
+  `.mise.toml` or `scripts/fakechrome.py`; it is the only layer that runs the
+  real binary.
 - A change to `extension/background.js` has been loaded into a real Chrome and
   `chromectl tab list` answered, or the report says it was not. The Go tests cannot
   see the JavaScript.
