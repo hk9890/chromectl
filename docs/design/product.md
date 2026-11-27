@@ -183,7 +183,7 @@ tab may still open or close, so the message says the outcome is unknown.
 | 1 | A reply with an error: Chrome's text verbatim, the extension's own, or a host's that cannot serve, never sent the request on, or could not decode the extension's reply. Also any failure of chromectl's own that is not usage, such as `install` | Show the text |
 | 2 | Bad usage: an unknown command or flag, a missing or extra argument, an id not of the form `tab list` prints, an empty title or url, a duration of zero or less, or no window id where several profiles run | Fix the call |
 | 4 | No reply: the deadline passed, or the host closed the connection without one, as when Chrome goes away mid-call. The command may or may not have taken effect. | Retry a read; check before repeating a write |
-| 5 | No host is listening, none for the profile the id names, or no runtime directory a host could listen in. Nothing reached Chrome. | Fall back, or start Chrome |
+| 5 | No host is listening, none for the profile the id names, or no runtime directory a host could listen in. Or the extension is older than chromectl: it does not know the command, or the host was started on a new binary and found that it does not know `identify` ([decision 0012](../decisions/0012-the-cli-reads-an-unknown-command-as-an-extension-to-reload.md)). Nothing reached Chrome. | Fall back, or start Chrome; reload the extension |
 
 Where `tab list`, `group list` or `group activate` print what answered while a host did
 not, they exit with the code of the first host that failed.
@@ -252,7 +252,7 @@ the Web Store, adding a permission becomes a prompt the user must accept.
 | The host dies mid-call | The call exits 4. |
 | The extension is reloaded | The CLI uses the new host. |
 | One profile's host does not answer in time | `tab list` prints the other profiles' tabs, warns, and exits 4. |
-| The binary was upgraded, the extension not yet reloaded | Every call to that profile answers "reload the chromectl extension", exit 1. An extension that predates groups answers `group list` and `group activate` with "unknown command", and `tab list` shows its tabs in no group. One that predates `group add` answers it with "unknown command add-to-group". One that predates `windowType` and `lastAccessed` shows `-` for both, and one that predates `windowFocusedAt` shows `-` for it. |
+| The binary was upgraded, the extension not yet reloaded | A command the extension does not know answers "reload it at chrome://extensions", exit 5; once the host restarts on the new binary, so does every call to a profile whose extension predates `identify`. An extension that predates groups gives that answer to `group list` and `group activate`, and `tab list` shows its tabs in no group; one that predates `group add` gives it to `group add`. One that predates `windowType` and `lastAccessed` shows `-` for both, and one that predates `windowFocusedAt` shows `-` for it. |
 | A profile was copied into a second browser | The CLI refuses that profile's ids and names both browsers. |
 | A profile was copied inside one browser | Known limit: the CLI reads it as a reload and shows only one of the two. |
 | No runtime directory, as in a session without logind | Known limit: the host cannot start, and the CLI reports no host. |

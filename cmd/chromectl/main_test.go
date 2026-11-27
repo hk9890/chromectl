@@ -352,6 +352,28 @@ func TestExitCodes(t *testing.T) {
 	}
 }
 
+// An extension that predates a command answers it with the command's wire
+// name, which the user never typed; the CLI says to reload it and exits 5.
+func TestACommandTheExtensionDoesNotKnowSaysReloadIt(t *testing.T) {
+	sockets := runtimeDir(t)
+	fakeSocket(t, sockets, "aaaa0001", 1, &proto.Reply{Error: "unknown command add-to-group"})
+
+	err := groupAdd(io.Discard, []string{"proj", "aaaa0001:5"})
+	if err == nil || err.Error() != proto.StaleExtension || exitCode(err) != 5 {
+		t.Fatalf("err = %v, code %d", err, exitCode(err))
+	}
+}
+
+func TestAStaleHostExits5(t *testing.T) {
+	runtimeDir(t)
+	startHost(t, "", "brave", 2, nil, nil)
+
+	err := tabCommand("activate", []string{"cccc0003:4"})
+	if err == nil || err.Error() != proto.StaleExtension || exitCode(err) != 5 {
+		t.Fatalf("err = %v, code %d", err, exitCode(err))
+	}
+}
+
 func TestActivateGoesToTheProfileItNames(t *testing.T) {
 	runtimeDir(t)
 	a, b := make(chan proto.Request, 1), make(chan proto.Request, 1)

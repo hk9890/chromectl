@@ -59,7 +59,8 @@ need a window id.
 
 Every command that calls Chrome takes --timeout <duration> (default 5s) before
 its arguments. Exit codes: 1 an error from Chrome or chromectl, 2 bad usage,
-4 no reply (the command may or may not have taken effect), 5 no host.
+4 no reply (the command may or may not have taken effect), 5 no host, or an
+extension older than chromectl (reload it).
 `
 
 func main() {
@@ -80,11 +81,11 @@ func main() {
 	case "group":
 		err = group(args)
 	case "install":
-		err = install(args)
+		err = install(os.Stdout, args)
 	case "host":
 		err = host()
 	case "version", "--version":
-		fmt.Printf("chromectl %s (%s, %s)\n", build.Version, build.Commit, build.Date)
+		fmt.Println("chromectl", build.Line())
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 	default:
@@ -172,7 +173,7 @@ func host() error {
 // install copies this binary and the extension to one directory whose path
 // no upgrade changes, then writes the native messaging manifest into every
 // Chrome-family config directory that exists, pointing at that copy.
-func install(args []string) error {
+func install(w io.Writer, args []string) error {
 	if len(args) != 0 {
 		return badUsage("install takes no arguments")
 	}
@@ -201,6 +202,8 @@ func install(args []string) error {
 		return err
 	}
 	extDir := filepath.Join(dir, "extension")
+	_, err = os.Stat(extDir)
+	upgrade := err == nil
 	if err := writeExtension(extDir); err != nil {
 		return err
 	}
@@ -223,11 +226,12 @@ func install(args []string) error {
 		}
 		written = append(written, path)
 	}
-	fmt.Printf("installed %s and %s\nwrote:\n  %s\n\n"+
-		"first install: load %s as an unpacked extension at chrome://extensions (id %s)\n"+
-		"upgrade: click reload on the chromectl card at chrome://extensions\n",
-		host, extDir, strings.Join(written, "\n  "), extDir, proto.ExtensionID)
-	return nil
+	next := fmt.Sprintf("first install: load %s as an unpacked extension at chrome://extensions (id %s)", extDir, proto.ExtensionID)
+	if upgrade {
+		next = "upgrade: click reload on the chromectl card at chrome://extensions"
+	}
+	_, err = fmt.Fprintf(w, "installed %s and %s\nwrote:\n  %s\n\n%s\n", host, extDir, strings.Join(written, "\n  "), next)
+	return err
 }
 
 // xdgDir reads an XDG base directory variable, or returns fallback under the

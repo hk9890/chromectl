@@ -39,6 +39,18 @@ func (e *NoReplyError) Error() string { return e.msg }
 
 func (e *NoReplyError) Unwrap() error { return e.err }
 
+// StaleError is a reply from an extension older than chromectl: it does not
+// know the command it was sent, or its host found that it does not know
+// identify.
+// Nothing reached Chrome; a reload of the extension fixes it.
+type StaleError struct{}
+
+func (StaleError) Error() string { return proto.StaleExtension }
+
+func stale(replyError string) bool {
+	return replyError == proto.StaleExtension || strings.HasPrefix(replyError, "unknown command ")
+}
+
 // SocketDir is the directory every host's socket is in. Without
 // XDG_RUNTIME_DIR, as under cron, it is /run/user/<uid>, the directory a
 // desktop session sets the variable to, so the CLI finds the hosts Chrome
@@ -201,6 +213,9 @@ func Call(socketPath string, req proto.Request, out any) error {
 		return &NoReplyError{"no reply: the chromectl host closed the connection, as when Chrome goes away; Chrome may or may not have carried the command out", io.EOF}
 	case err != nil:
 		return fmt.Errorf("%s: %w", step, err)
+	}
+	if stale(reply.Error) {
+		return StaleError{}
 	}
 	if reply.Error != "" {
 		return errors.New(reply.Error)

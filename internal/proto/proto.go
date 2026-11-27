@@ -90,7 +90,8 @@ type Identity struct {
 const ProfileID = `[0-9a-f]{8}`
 
 // StaleExtension is the answer of a host whose extension is older than its
-// binary and does not know identify.
+// binary and does not know identify. Hosts of every earlier version send this
+// text and the CLI matches it byte for byte, so it never changes.
 const StaleExtension = "the chromectl extension is older than chromectl: reload it at chrome://extensions"
 
 // ExtensionID is fixed by the "key" field in extension/manifest.json.

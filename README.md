@@ -39,7 +39,7 @@ cannot raise its own window.
 Every command that talks to Chrome gives up after 5 seconds; `--timeout 2s`
 sets another limit. Exit codes: 1 an error from Chrome, 2 bad usage, 4 no reply
 in time (the command may still have taken effect), 5 Chrome or the extension
-is not running.
+is not running, or the extension is older than chromectl and needs a reload.
 
 A tab, window or group id is `<profile>:<number>`, for example `3f9a12bc:812`: the
 browser profile that owns it, and Chrome's own number, which resets when

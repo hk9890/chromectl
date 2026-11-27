@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hk9890/chromectl/internal/proto"
@@ -43,7 +46,7 @@ func manifestPath(t *testing.T, cfg string) string {
 func TestInstallCopiesBinaryAndExtensionAndPointsManifestAtTheCopy(t *testing.T) {
 	_, data, cfg := isolate(t)
 
-	if err := install(nil); err != nil {
+	if err := install(io.Discard, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -68,7 +71,7 @@ func TestInstallCopiesBinaryAndExtensionAndPointsManifestAtTheCopy(t *testing.T)
 
 func TestInstallRunTwiceReplacesTheCopy(t *testing.T) {
 	_, data, _ := isolate(t)
-	if err := install(nil); err != nil {
+	if err := install(io.Discard, nil); err != nil {
 		t.Fatal(err)
 	}
 	dir := filepath.Join(data, "chromectl")
@@ -79,7 +82,7 @@ func TestInstallRunTwiceReplacesTheCopy(t *testing.T) {
 		}
 	}
 
-	if err := install(nil); err != nil {
+	if err := install(io.Discard, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -95,13 +98,27 @@ func TestInstallRunTwiceReplacesTheCopy(t *testing.T) {
 	}
 }
 
+func TestInstallPrintsOnlyTheNextStepThatApplies(t *testing.T) {
+	isolate(t)
+	const first, upgrade = "first install: load ", "upgrade: click reload "
+	for _, want := range []struct{ has, hasNot string }{{first, upgrade}, {upgrade, first}} {
+		var out bytes.Buffer
+		if err := install(&out, nil); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), "\n"+want.has) || strings.Contains(out.String(), want.hasNot) {
+			t.Errorf("want %q and not %q in:\n%s", want.has, want.hasNot, out.String())
+		}
+	}
+}
+
 func TestInstallWithoutAChromeConfigDirectoryWritesNothing(t *testing.T) {
 	_, data, cfg := isolate(t)
 	if err := os.Remove(filepath.Join(cfg, "google-chrome")); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := install(nil); err == nil {
+	if err := install(io.Discard, nil); err == nil {
 		t.Fatal("install succeeded without a Chrome-family config directory")
 	}
 
@@ -115,7 +132,7 @@ func TestInstallIgnoresARelativeXDGDataHome(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("XDG_DATA_HOME", "relative")
 
-	if err := install(nil); err != nil {
+	if err := install(io.Discard, nil); err != nil {
 		t.Fatal(err)
 	}
 
