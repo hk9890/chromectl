@@ -210,8 +210,11 @@ moment it is loaded.
 
 After an upgrade, the user reloads the extension. Until the reload, the old
 extension runs beside the new binary; what that costs is in
-[What degrades](#what-degrades-and-how-far). The permission set is closed
-([decision 0008](../decisions/0008-the-extensions-permission-set-is-closed.md)).
+[What degrades](#what-degrades-and-how-far). The reload of an unpacked
+extension grants a new permission without a prompt; Chrome disables an
+extension from the Web Store until the user accepts one. Whether a command may
+add a permission is
+[decision 0008](../decisions/0008-the-extensions-permission-set-is-closed.md)'s.
 
 ## Scope
 
