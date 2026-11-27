@@ -2,11 +2,12 @@
 
 ## Repository purpose
 
-chromectl controls Chrome tabs from the command line: list, activate, open,
-close. Chrome shows its tabs only to an extension, so the product is an MV3
-extension plus a Go binary that Chrome starts as its native messaging host;
-every CLI call is a one-shot client of that host's Unix socket. Go, no
-dependencies outside the standard library.
+chromectl controls Chrome tabs and tab groups from the command line: list,
+activate, open and close a tab; list, activate and add to a group. Chrome
+shows its tabs only to an extension, so the product is an MV3 extension plus a
+Go binary that Chrome starts as its native messaging host; every CLI call is a
+one-shot client of that host's Unix socket. Go, no dependencies outside the
+standard library.
 
 ## Use-case routing
 
@@ -52,16 +53,17 @@ the record and ask.
 ### Testing and verification
 
 **MUST read [docs/TESTING.md](docs/TESTING.md) before writing a test, before
-your first `go test` or `mise run test*`, and before reporting a change as
-green.** The layer a test belongs in decides whether it can run without a
-Chrome.
+your first `go test`, `mise run test*`, `mise run quality` or `mise run drive`,
+and before reporting a change as green.** The layer a test belongs in decides
+whether it can run without a Chrome.
 
 ### Reviewing changes
 
-**MUST read [docs/REVIEWING.md](docs/REVIEWING.md) before reviewing a PR or a
-diff.** It carries the rules a finished change is held to: what happens to
-Chrome's error text on the way to the caller, and what the one sentinel error
-must say.
+**MUST read [docs/REVIEWING.md](docs/REVIEWING.md) before your first
+`gh pr view`, `gh pr diff`, `git diff` or `git show` of a change under review,
+before calling a review skill, and before judging a diff you were handed.** It carries the rules a finished change is held to:
+what happens to Chrome's error text on the way to the caller, and what the one
+sentinel error must say.
 
 ### Cutting a release
 

@@ -7,18 +7,19 @@ takes no direct commit.
 
 ```bash
 git switch -c <type>/<what>   # feat/, fix/, docs/, chore/
-mise run quality              # must pass before the commit
+mise run quality              # must pass before each commit
+# commit, per Commits below
 git push -u origin HEAD
 gh pr create --fill
 ```
 
-Review the PR against [REVIEWING.md](REVIEWING.md) with
-`/worktree-flow:worktree-review <pr>` before the merge. Squash-merge; delete the
-branch after.
+Call the Skill tool with `worktree-flow:worktree-review` and the PR number
+before the merge; it reviews against [REVIEWING.md](REVIEWING.md).
+Squash-merge; delete the branch after.
 
 ## Commits
 
-Use the `commit-commands:commit` skill for the standard flow.
+Call the Skill tool with `commit-commands:commit` for the standard flow.
 
 **Local delta:**
 
@@ -31,6 +32,6 @@ Use the `commit-commands:commit` skill for the standard flow.
 
 ## Before opening a PR
 
-- `mise run quality` passes; [TESTING.md](TESTING.md) says when `drive` and a
-  live Chrome are also required.
+- The change is green by [TESTING.md](TESTING.md), which says when `drive` and
+  a live Chrome are also required.
 - A change to the wire format touched both files [CODING.md](CODING.md) names.

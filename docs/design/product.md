@@ -212,13 +212,14 @@ written after the user loaded the extension and read the id back. With it,
 `chromectl install` can write the manifest first and the extension works the
 moment it is loaded.
 
-A new permission costs the user nothing beyond that reload. Chrome disables an
-extension whose update adds a permission with a warning until the user accepts
-it, but only for an extension from the Web Store; an unpacked extension is a
-trusted location, and the reload grants the permission silently. Until the
-reload, the old extension runs beside the new binary; what that costs is in
-[What degrades](#what-degrades-and-how-far). Should chromectl ever ship through
-the Web Store, adding a permission becomes a prompt the user must accept.
+After an upgrade and a new `chromectl install`, the user reloads the
+extension. Until the reload, the old extension runs beside the new binary;
+what that costs is in [What degrades](#what-degrades-and-how-far). The reload
+of an unpacked extension grants a new permission without a prompt; Chrome
+disables a Web Store extension whose update adds a permission with a warning,
+until the user accepts it. Whether a command may
+add a permission is
+[decision 0008](../decisions/0008-the-extensions-permission-set-is-closed.md)'s.
 
 ## Scope
 

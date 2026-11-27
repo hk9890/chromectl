@@ -2,32 +2,27 @@
 
 ## Start here
 
-The design set under [design/](design/) owns why the system has this shape.
-The records under [decisions/](decisions/) hold each decision in force, with
-the options it rejected.
 [design/architecture.md](design/architecture.md) states the constraint every
 structural choice follows from: only the extension can open a connection, so
-the CLI talks to the host Chrome already started, never to Chrome.
-
-```
-chromectl tab list ──unix socket──▶ chromectl host ◀──stdin/stdout──▶ extension ──▶ chrome.tabs
-                    $XDG_RUNTIME_DIR/chromectl/       native messaging
-                    one socket per profile
-```
+the CLI talks to the host Chrome already started, never to Chrome. Its
+[process diagram](design/architecture.md#three-processes) shows the three
+processes and what connects them.
 
 ## Layout
 
+Each Go package states what it does in its package comment.
+
 | Path | Holds |
 |---|---|
-| `embed.go` | Embeds `extension/` into the binary, for `install` to write out. |
-| `cmd/chromectl/` | The CLI (`tabs.go`: the tab commands, composite ids, routing to a profile's host), the `install` and `version` commands, and the `host` entry. |
-| `internal/proto/` | The one message shape both sides speak, plus the extension id and host name. |
-| `internal/native/` | Chrome's framing: 4-byte native-endian length, then JSON. |
-| `internal/hostd/` | The host: learns its profile, names its socket for it, numbers each request, relays it, returns the reply to the socket connection that asked. |
-| `internal/client/` | The CLI's side of the sockets: where they live, the host each name stands for, one call. |
-| `internal/build/` | The version `mise run build` and `.goreleaser.yaml` stamp in. |
-| `extension/` | The MV3 extension. Its `key` fixes the id. |
-| `scripts/fakechrome.py` | A scripted Chrome on the host's pipes, for driving headless. |
+| `embed.go` | The extension, embedded into the binary. |
+| `cmd/chromectl/` | The CLI, the `install` and `version` commands, and the `host` entry. |
+| `internal/proto/` | The message shape both protocols carry. |
+| `internal/native/` | Chrome's framing. |
+| `internal/hostd/` | The host. |
+| `internal/client/` | The CLI's side of the sockets. |
+| `internal/build/` | The version the build stamps in. |
+| `extension/` | The MV3 extension. |
+| `scripts/fakechrome.py` | A scripted Chrome on the host's pipes, for `mise run drive`. |
 
 ## Wire format
 
@@ -39,7 +34,7 @@ same JSON names.
 
 ```bash
 rg -n 'async "?[\w-]+"?\(' extension/background.js    # every command the extension implements
-rg -n 'case "' cmd/chromectl/main.go                  # every CLI subcommand
+rg -n 'case (act == )?"' cmd/chromectl/main.go        # every CLI subcommand
 rg -n 'json:"' internal/proto/proto.go                # every field on the wire
 ```
 

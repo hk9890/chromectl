@@ -108,8 +108,6 @@ the request out; its late reply, for a `seq` no longer pending, is logged and
 dropped. The caller's close frees a call only once its request is written: a
 call that waits to write to a Chrome that stopped reading the pipe stays held.
 
-The CLI tells the two ways a call ends without a reply by one error type,
-`client.NoReplyError`, which unwraps to `os.ErrDeadlineExceeded` or `io.EOF`.
 A fan-out leaves out only a dead host, whose socket refuses. A host that
 closed the connection is a failure the fan-out reports: the CLI cannot tell a
 Chrome that shuts down from a host that crashed mid-call.
@@ -130,33 +128,19 @@ the profile the window or the tab names, or the one that runs.
 
 ## Concurrency in the host
 
-- One goroutine reads replies from Chrome and delivers each to the channel
-  registered under its `seq`. A reply for an unknown `seq` is logged and
-  dropped. A reply that does not decode fails the call its `seq` names; where
-  the `seq` does not decode either, it fails every pending call, because no
-  one call can be told it was the one.
-- Every socket connection is its own goroutine: decode, register, write to
-  Chrome under one mutex, wait on its channel or for the caller to leave,
-  encode. A second goroutine reads the connection during the wait, to see the
-  caller leave.
-- When the pipe closes, every pending call is closed without a reply, the
-  socket file is removed, the listener closes, and `Run` returns once each
-  call that reached Chrome has written its reply, or has had one second to. The process exits with
-  `Run`, so a reply not yet written would be lost, and a caller that never
-  reads must not hold the process.
-
-## Layout
-
-| Path | Holds |
-|---|---|
-| `extension/` | The MV3 extension. `manifest.json` carries the public key that fixes the id; `background.js` is the command table and the port. |
-| `embed.go` | The extension, embedded so a released binary can install it. |
-| `cmd/chromectl/` | The CLI, `install`, `version`, and the `host` entry. |
-| `internal/proto/` | The one message shape both protocols carry, and the two constants the manifest and the extension must agree on. |
-| `internal/native/` | Chrome's framing. |
-| `internal/hostd/` | The relay, and the socket it listens at. |
-| `internal/client/` | The CLI's side: finding the hosts, and calling one. |
-| `internal/build/` | The version the build stamps in. |
+- Each call waits for the reply that carries its `seq`. A reply for an unknown
+  `seq` is logged and dropped. A reply that does not decode fails the call its
+  `seq` names; where the `seq` does not decode either, it fails every pending
+  call, because no one call can be told it was the one.
+- Calls do not wait for each other: every socket connection is served on its
+  own, and only the write to Chrome is serialized. The host watches each
+  connection while its call waits, so a caller that leaves frees its call,
+  with the one exception [The deadline](#the-deadline) states.
+- When the pipe closes, every pending call is closed without a reply. The host
+  then waits for each call that reached Chrome to write its reply, within the
+  bound that [Three processes](#three-processes) gives: the process exits
+  after that, so a reply not yet written would be lost, and a caller that
+  never reads must not hold the process.
 
 ## Consumers
 
