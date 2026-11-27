@@ -3,7 +3,6 @@
 ```bash
 mise run build      # ./bin/chromectl
 mise run fmt
-mise run quality    # the pre-commit gate
 ```
 
 ## Two files must agree
@@ -42,8 +41,9 @@ Return a usage mistake as `badUsage(...)`; `exitCode` in
 - The extension id `mpnpeobidlmllklmdpnkhhhblkbhpmcp` is derived from the
   `key` in `extension/manifest.json`. The `key` never changes; every installed
   native messaging manifest allows that id and nothing else.
-- Tab and window ids are Chrome's numbers and reset on restart. The CLI prints
-  and reads them as `<profile>:<number>`; the host and the extension see only
-  the number. Matching a tab by URL is the caller's job.
+- The CLI prints and reads a tab, window or group id as `<profile>:<number>`,
+  and it alone adds and strips the profile; the host and the extension see
+  only the number
+  ([decision 0003](decisions/0003-an-id-is-the-profile-plus-the-chrome-id-in-full.md)).
 - A host's identity is its socket name, which `client.Hosts` parses. Change
   the name in `internal/hostd` and `internal/client` together.

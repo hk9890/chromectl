@@ -23,8 +23,3 @@ and return nothing:
 |---|---|
 | `docs/MONITORING.md` | the host writes a log file; today its stderr is Chrome's, see [RUNNING.md](RUNNING.md) |
 | `CONTRIBUTING.md` | someone other than the author builds from source |
-
-## README scope
-
-`README.md` says what chromectl is, how to install it, and how to use it.
-Building, testing, driving and the wire format are `docs/`, not README.

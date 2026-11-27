@@ -7,18 +7,19 @@ takes no direct commit.
 
 ```bash
 git switch -c <type>/<what>   # feat/, fix/, docs/, chore/
-mise run quality              # must pass before the commit
+mise run quality
+# commit, per Commits below
 git push -u origin HEAD
 gh pr create --fill
 ```
 
-Review the PR against [REVIEWING.md](REVIEWING.md) with
-`/worktree-flow:worktree-review <pr>` before the merge. Squash-merge; delete the
-branch after.
+Call the Skill tool with `worktree-flow:worktree-review` and the PR number
+before the merge; it reviews against [REVIEWING.md](REVIEWING.md).
+Squash-merge; delete the branch after.
 
 ## Commits
 
-Use the `commit-commands:commit` skill for the standard flow.
+Call the Skill tool with `commit-commands:commit` for the standard flow.
 
 **Local delta:**
 

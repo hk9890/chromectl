@@ -1,5 +1,8 @@
 # Running
 
+Call the Skill tool with `run` for the generic flow. Below is the local delta,
+which wins where the two disagree.
+
 Two substrates. The first is headless and safe; the second is the user's live
 browser.
 
@@ -9,20 +12,13 @@ browser.
 mise run drive
 ```
 
-`scripts/fakechrome.py` starts `./bin/chromectl` on pipes with the arguments Chrome passes, plays the
-extension, and runs `tab list`, `tab open`, `tab activate`, `group list`,
-`group activate` and `group add` through the CLI, each with the exit code it
-must give, and `tab close` on a tab the extension never answers for, which
-must exit 4 at its 200ms deadline. It then checks that an old flat name such as `list` exits 2. It prints
-every request the host forwarded and every CLI result, then closes the pipe and
-reports the host's exit and that `tab list` then finds no host. It exits 1 on the
-first result that differs from its `cases`. Edit `extension()` and `cases`
-together to script a different answer.
+`scripts/fakechrome.py` starts `./bin/chromectl` on pipes as Chrome does, in a
+fresh `XDG_RUNTIME_DIR`, plays the extension, and runs its `cases` through the
+CLI. It prints every request the host forwarded and every CLI result, and
+exits 1 on the first result that differs.
 
-To drive by hand instead: start the host with `XDG_RUNTIME_DIR` set to a fresh
-directory, so the CLI does not also reach the hosts of a running Chrome, and
-use the same variable for the CLI. Answer the host's first request, `identify`,
-with `{"profile": "<8 hex digits>"}`: it opens its socket only after that.
+To drive a different case, edit `extension()` and `cases` in the script
+together.
 
 ## Live: the user's Chrome
 
